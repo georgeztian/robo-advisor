@@ -29,19 +29,33 @@ from .universe import CATALOG
 from .report.html import audit_bundle, render
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _in_project(path: str) -> str:
+    """Relative data paths (price cache, CSV folder) live in the project folder, whichever folder
+    the command is started from."""
+    p = Path(path)
+    if p.is_absolute() or not (PROJECT_ROOT / "pyproject.toml").exists():
+        return str(p)
+    return str(PROJECT_ROOT / p)
+
+
 def _settings(args) -> Settings:
     data = {}
     if getattr(args, "provider", None):
         data["provider"] = args.provider
     if getattr(args, "risk_free", None):
         data["risk_free_source"] = args.risk_free
-    return load_settings(getattr(args, "config", None), {"data": data} if data else None)
+    s = load_settings(getattr(args, "config", None), {"data": data} if data else None)
+    s.data.cache_dir, s.data.csv_dir = _in_project(s.data.cache_dir), _in_project(s.data.csv_dir)
+    return s
 
 
 def _provider(s: Settings):
     d = s.data
-    return make_provider(d.provider, csv_dir=d.csv_dir, cache_dir=d.cache_dir, retries=d.request_retries,
-                         refresh_hours=d.cache_refresh_hours)
+    return make_provider(d.provider, csv_dir=d.csv_dir, cache_dir=d.cache_dir,
+                         retries=d.request_retries, refresh_hours=d.cache_refresh_hours)
 
 
 def _as_of(value: str | None) -> dt.date | None:
@@ -139,6 +153,38 @@ def _fraction(prompt: str, default: float) -> float:
         print("  enter a fraction between 0 and 1, e.g. 0.25 for 25%")
 
 
+def _rate(prompt: str, default: float) -> float:
+    while True:
+        v = _ask(prompt, default, float)
+        if 0 <= v < 1:
+            return v
+        print("  enter a decimal between 0 and 1, e.g. 0.24 for 24%")
+
+
+def _at_least_one(prompt: str, default: float) -> float:
+    while True:
+        v = _ask(prompt, default, float)
+        if v >= 1:
+            return v
+        print("  enter a number of at least 1, e.g. 1.5")
+
+
+def _positive(prompt: str) -> float:
+    while True:
+        v = _ask(prompt, cast=float)
+        if v > 0:
+            return v
+        print("  enter a number greater than 0")
+
+
+def _amount(prompt: str, default: float | None = None) -> float:
+    while True:
+        v = _ask(prompt, default, float)
+        if v >= 0:
+            return v
+        print("  enter a non-negative amount")
+
+
 def _ask_category_limits(s: Settings, universe: list[str]) -> dict[str, float]:
     """Show the category limits that apply to the chosen ETFs; let the client change them."""
     cats = [c for c, ts in s.universe.categories.items() if any(t in universe for t in ts)]
@@ -183,12 +229,17 @@ def interactive_client(s: Settings) -> ClientInput:
     has_target = _yes("Do you have a specific target amount you want to reach by a specific date?", True)
     goal: dict = {"has_target": has_target}
     if has_target:
-        goal["target_amount"] = _ask("Target portfolio value ($)", cast=float)
-        goal["target_date"] = _ask("Target date (YYYY-MM-DD)", cast=dt.date.fromisoformat)
-    goal["initial_investment"] = _ask("Initial investment ($)", cast=float)
-    goal["monthly_contribution"] = _ask("Monthly contribution ($)", 0.0, float)
+        goal["target_amount"] = _positive("Target portfolio value ($)")
+        while True:
+            d = _ask("Target date (YYYY-MM-DD)", cast=dt.date.fromisoformat)
+            if d > dt.date.today() + dt.timedelta(days=31):
+                break
+            print("  the target date must be more than a month from today")
+        goal["target_date"] = d
+    goal["initial_investment"] = _amount("Initial investment ($)")
+    goal["monthly_contribution"] = _amount("Monthly contribution ($)", 0.0)
     if not has_target:
-        goal["horizon_years"] = _ask("Investment horizon (years)", cast=float)
+        goal["horizon_years"] = _positive("Investment horizon (years)")
 
     def block(qs, title, skip_derived):
         print(f"\n== Step 3: {title} ==")
@@ -210,20 +261,23 @@ def interactive_client(s: Settings) -> ClientInput:
     print("\n== Step 5: Constraints ==")
     allow_short = _yes("Are short sales allowed?", False)
     cons = {"allow_short": allow_short,
-            "max_position": _ask("Maximum position size (fraction)", s.optimization.max_position, float)}
+            "max_position": _fraction("Maximum position size per ETF (fraction, e.g. 0.5 for 50%)",
+                                      s.optimization.max_position)}
     if allow_short:
-        cons["max_gross_leverage"] = _ask("Maximum gross exposure L", s.optimization.max_gross_leverage, float)
+        cons["max_gross_leverage"] = _at_least_one("Maximum gross exposure L (e.g. 1.5 = 150%)",
+                                                   s.optimization.max_gross_leverage)
     limits = _ask_category_limits(s, universe)
     if limits:
         cons["category_limits"] = limits
     taxes = {"enabled": _yes("Should taxes be incorporated?", False)}
     if taxes["enabled"]:
         t = s.tax
-        taxes |= {"ordinary_rate": _ask("Marginal income-tax rate", t.ordinary_rate, float),
-                  "qualified_dividend_rate": _ask("Qualified-dividend rate", t.qualified_dividend_rate, float),
-                  "ltcg_rate": _ask("Long-term capital-gains rate", t.ltcg_rate, float),
-                  "stcg_rate": _ask("Short-term capital-gains rate", t.stcg_rate, float),
-                  "state_rate": _ask("State tax rate", t.state_rate, float)}
+        print("Enter tax rates as decimals, e.g. 0.24 for 24%.")
+        taxes |= {"ordinary_rate": _rate("Marginal income-tax rate", t.ordinary_rate),
+                  "qualified_dividend_rate": _rate("Qualified-dividend rate", t.qualified_dividend_rate),
+                  "ltcg_rate": _rate("Long-term capital-gains rate", t.ltcg_rate),
+                  "stcg_rate": _rate("Short-term capital-gains rate", t.stcg_rate),
+                  "state_rate": _rate("State tax rate", t.state_rate)}
     prefs = _ask_optimizer(s, has_target)
     return ClientInput.model_validate({"profile": {"name": name}, "goal": goal, "capacity_answers": cap,
                                        "tolerance_answers": tol, "universe": universe, "constraints": cons,
@@ -249,11 +303,12 @@ def cmd_run(args) -> int:
     try:
         res = graph.run({"client": client}, parallel=not args.sequential)
     except GraphHalted as e:
-        print(f"\nWORKFLOW HALTED at {e.node}: {e}", file=sys.stderr)
-        audit = {"halted_at": e.node, "reason": str(e),
-                 "reviews": [{"stage": r.stage, "findings": [vars(f) for f in r.findings]} for r in e.result.reviews],
-                 "trace": [vars(t) for t in e.result.trace]}
-        (out / f"{slug}_audit.json").write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
+        halted = out / f"{slug}_halted.json"         # never overwrite the last good audit
+        record = {"halted_at": e.node, "reason": str(e),
+                  "reviews": [{"stage": r.stage, "findings": [vars(f) for f in r.findings]} for r in e.result.reviews],
+                  "trace": [vars(t) for t in e.result.trace]}
+        halted.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
+        print(f"\nWORKFLOW HALTED at {e.node}: {e}\nDetails: {halted}", file=sys.stderr)
         return 2
     html_path, audit_path = out / f"{slug}_report.html", out / f"{slug}_audit.json"
     html_path.write_text(render(res, s, graph.to_mermaid()), encoding="utf-8")
@@ -278,9 +333,18 @@ def cmd_run(args) -> int:
 def cmd_monitor(args) -> int:
     s = _settings(args)
     prior = json.loads(_read(args.prior))
+    if not all(k in prior for k in ("client", "portfolio", "risk", "estimates", "as_of")):
+        raise ValueError(f"{args.prior} is not the audit file of a completed recommendation "
+                         "(use the <name>_audit.json written by a successful run)")
     client = (ClientInput.model_validate_json(_read(args.profile)) if args.profile
               else ClientInput.model_validate(prior["client"]))
-    res = build_monitoring_graph(s, _provider(s)).run({"client": client, "prior": prior})
+    # re-assess as of today (or --as-of), not as of the prior recommendation's date
+    client = client.model_copy(update={"as_of": _as_of(args.as_of)})
+    try:
+        res = build_monitoring_graph(s, _provider(s)).run({"client": client, "prior": prior})
+    except GraphHalted as e:
+        print(f"\nMONITORING HALTED at {e.node}: {e}", file=sys.stderr)
+        return 2
     rep = res.state["monitoring"]
     print(f"Monitoring {rep.prior_as_of} -> {rep.as_of}")
     print(json.dumps(rep.metrics, indent=2, default=str))
@@ -304,6 +368,9 @@ def cmd_data(args) -> int:
     except ValueError:
         start = as_of.replace(year=as_of.year - s.data.lookback_years, day=28)
     tickers = [t.upper() for t in args.tickers] if args.tickers else list(s.universe.tickers)
+    unknown = [t for t in tickers if t not in CATALOG]
+    if unknown:
+        raise ValueError(f"unknown ticker(s) {unknown}; offered ETFs: {', '.join(s.universe.tickers)}")
     tickers = sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker})
     prov = _provider(s)
     print(f"Fetching {len(tickers)} tickers from {prov.name} ({start} to {as_of}) ...")
@@ -358,7 +425,8 @@ def cmd_questionnaire(args) -> int:
     for block in ("capacity", "tolerance"):
         print(f"\n# {block}")
         for q in getattr(s.questionnaire, block):
-            print(f"- {q.id} (weight {q.weight}): {q.text}\n    options: {q.options}")
+            note = "  [answered automatically from the goal; leave it out of profiles]" if q.derive_from_goal else ""
+            print(f"- {q.id} (weight {q.weight}): {q.text}{note}\n    options: {q.options}")
     return 0
 
 
@@ -381,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--config", help="YAML overriding config/default.yaml")
         p.add_argument("--provider", choices=["synthetic", "csv", "yahoo"])
         p.add_argument("--risk-free", choices=["etf", "fred"], help="risk-free source (default: config)")
-    for p in (r, d):
+    for p in (r, d, m):
         p.add_argument("--as-of", help="analysis date YYYY-MM-DD or 'today' (overrides the profile)")
     gp = sub.add_parser("graph", help="print the workflow graph (mermaid)")
     gp.add_argument("--monitoring", action="store_true")

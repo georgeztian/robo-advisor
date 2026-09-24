@@ -40,7 +40,9 @@ class Reviewer:
     def _expected_caps(self, req) -> dict[str, tuple[float, list[str]]]:
         """Category limits that must apply: config defaults overridden by the client's profile."""
         limits = dict(self.s.optimization.category_limits)
-        limits.update(req.client.constraints.category_limits or {})
+        by_lower = {cat.lower(): cat for cat in self.s.universe.categories}
+        limits.update({by_lower.get(k.strip().lower(), k): v
+                       for k, v in (req.client.constraints.category_limits or {}).items()})
         out = {}
         for cat, members in self.s.universe.categories.items():
             held = [t for t in req.tickers if t in members]
@@ -122,8 +124,8 @@ class Reviewer:
     def review_inputs(self, st: Mapping[str, Any]) -> ReviewReport:
         out: list[ReviewFinding] = []
         f = self._f
-        req, risk, market, dq, est, tax, rc = (st["request"], st["risk"], st["market"], st["data_quality"],
-                                               st["estimates"], st["tax"], st["constraints"])
+        req, risk, market, est, tax, rc = (st["request"], st["risk"], st["market"], st["estimates"],
+                                           st["tax"], st["constraints"])
         qs = self.s.questionnaire
         # risk profiling (spec §2)
         cap_answers = {**risk.derived_answers, **req.client.capacity_answers}

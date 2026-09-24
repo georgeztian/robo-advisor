@@ -7,7 +7,7 @@ import pandas as pd
 
 from .models import (BenchmarkResult, DataQualityReport, Estimates, Explanation, Portfolio, Projection,
                      Request, RiskAssessment, ScenarioResult, SimulationResult, TaxContext)
-from .optimization.methods import METHOD_LABELS
+from .optimization.methods import METHOD_DESCRIPTIONS, METHOD_LABELS
 from .rebalancing import describe as describe_rebalancing
 from .universe import CATALOG, RISK_NOTE_PREFIX, category_of
 
@@ -140,11 +140,17 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
                               f"{_money(gs['required_monthly_contribution'])} would reach "
                               f"{req.target_probability:.0%} with this portfolio.")
     else:
+        if port.method == "mean_variance":       # the spec's §16 wording for the default method
+            how = (f"the optimizer maximizes estimated portfolio return subject to the "
+                   f"{risk.max_volatility:.0%} volatility limit implied by your mapped risk profile")
+        else:
+            desc = METHOD_DESCRIPTIONS.get(port.method, method_label(port.method))
+            how = (f"the portfolio was built with the method you chose, {port.method.replace('_', ' ')} "
+                   f"({desc[0].lower() + desc[1:]}), within the {risk.max_volatility:.0%} volatility limit "
+                   f"implied by your mapped risk profile")
         goal_text = (
-            f"Because you did not specify a target amount, the optimizer maximizes estimated portfolio "
-            f"return subject to the {risk.max_volatility:.0%} volatility limit implied by your mapped risk "
-            f"profile ({method_label(port.method)}). Over your {req.months / 12:.0f}-year horizon the median "
-            f"simulated portfolio value is {_money(sim.percentiles[50])}.")
+            f"Because you did not specify a target amount, {how}. Over your {req.months / 12:.0f}-year "
+            f"horizon the median simulated portfolio value is {_money(sim.percentiles[50])}.")
     portfolio_text = (
         f"Estimated annual return {port.expected_return:.2%}"
         + (f" after tax ({port.expected_return_pretax:.2%} pre-tax)" if tax.mu_after_tax is not None else "")

@@ -68,7 +68,7 @@ def assess_risk(settings: Settings, client: ClientInput, as_of: dt.date) -> Risk
             derived[q.id] = horizon_option(months)
     cap, cap_detail = _score_block(qs.capacity, client.capacity_answers, derived, "capacity")
     tol, tol_detail = _score_block(qs.tolerance, client.tolerance_answers, {}, "tolerance")
-    mapped = min(cap, tol)   # settings.risk_mapping == "min" (the only supported, conservative rule)
+    mapped = min(cap, tol)   # conservative mapping (spec §2C)
     band = settings.band_for(mapped)
     return RiskAssessment(capacity_score=cap, tolerance_score=tol, mapped_score=mapped,
                           profile=band.profile, max_volatility=band.max_volatility,

@@ -126,9 +126,9 @@ This first command then prints the ETF menu. Seeing the menu means the installat
 ```
 ./ra data
 ```
-This downloads about 20 years of real daily prices from Yahoo Finance for all 25 ETFs, plus
-VOO (the S&P 500 benchmark) and BIL (the T-bill risk-free proxy). It then validates them and
-prints a table ending in `Data OK.`
+This downloads about 20 years of real daily prices from Yahoo Finance for all 25 ETFs. Two of
+them are also always used behind the scenes: VOO as the S&P 500 benchmark, and BIL as the T-bill
+risk-free proxy. It then validates the data and prints a table ending in `Data OK.`
 
 The prices are cached in `.cache/prices/`, so later runs are fast and work offline. Re-run
 this command whenever you want to check the data. Every analysis also refreshes the cache
@@ -143,8 +143,9 @@ automatically when it is out of date.
 The app asks, in order:
 
 1. The client's name, and whether there is a **target** amount by a specific date. If yes, it
-   asks for the target amount and date (YYYY-MM-DD); if no, for the horizon in years.
-2. The initial investment and monthly contribution in dollars.
+   asks for the target amount and date (YYYY-MM-DD).
+2. The initial investment and monthly contribution in dollars, then, if there is no target,
+   the investment horizon in years.
 3. **9 risk-capacity questions** and **7 risk-tolerance questions**. Type the number of the
    answer. The investment-horizon question is answered automatically from the goal.
 4. **ETFs, category by category.** For each of the 9 categories, type the numbers of the ETFs
@@ -163,6 +164,11 @@ Results go to the folder given by `--out` (use one folder per client):
 | `client_name_report.html` | The recommendation report |
 | `client_name_profile.json` | The client's answers, saved so you can edit and re-run them (Route B, step B4) |
 | `client_name_audit.json` | The full audit trail; needed for later check-ins (Step 8) |
+
+Here and below, `client_name` stands for the client's name as the app writes it in file names:
+lower case, with spaces and punctuation replaced by `_`. For example, "Jane Doe" gives
+`jane_doe_report.html`. If a run is stopped by the reviewer, the details go to
+`client_name_halted.json`, and the last good report and audit are left untouched.
 
 #### Route B: Fill out a profile file
 **B1. Create the file**, for example `clients/client_name.json`. Create the `clients` folder first
@@ -217,7 +223,7 @@ as an `INPUT PROBLEM` naming the field.
 | `goal.target_amount`, `goal.target_date` | Only if `has_target` is `true`, e.g. `500000` and `"2036-12-31"` |
 | `goal.horizon_years` | Only if `has_target` is `false`, e.g. `15` |
 | `goal.initial_investment`, `goal.monthly_contribution` | Dollar amounts (numbers without `$` or commas) |
-| `capacity_answers` | One answer code for each of the 9 capacity questions (from `./ra questionnaire`) |
+| `capacity_answers` | One answer code for each of the 9 capacity questions. `./ra questionnaire` lists 10; leave out `investment_horizon`, which is derived from the goal |
 | `tolerance_answers` | One answer code for each of the 7 tolerance questions |
 | `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
 | `constraints` | `allow_short` (`true`/`false`); optional `max_position` (e.g. `0.3`); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
@@ -274,7 +280,10 @@ command. Each run overwrites that client's report and audit.
    ```
 3. It reports the performance since the last recommendation, and any **review triggers**:
    goal changed, contribution changed, target at risk, risk limit exceeded, market risk
-   shifted, or risk profile changed. If any fire, re-run Step 5 B4 with the updated profile.
+   (volatility or correlations) shifted, risk profile changed, or ETFs still held were dropped
+   from the selection. If any fire, re-run Step 5 B4 with the updated profile.
+
+   Without `--profile`, it re-checks the prior answers against today's data.
 
 ### Step 9: Update the app
 ```
@@ -302,7 +311,7 @@ Common options:
 | Option | Meaning |
 |---|---|
 | `--provider yahoo\|csv\|synthetic` | Data source. The default is `yahoo` (real prices); `synthetic` is simulated data for offline testing |
-| `--as-of YYYY-MM-DD\|today` | Analysis date; data after it is never used |
+| `--as-of YYYY-MM-DD\|today` | Analysis date for `run`, `data` and `monitor`; data after it is never used (default: today) |
 | `--out FOLDER` | Where the report, audit and profile are written (default `out`) |
 | `--risk-free etf\|fred` | Risk-free rate from the BIL ETF (default) or the FRED 3-month T-bill rate |
 | `--config FILE.yaml` | Override settings (see Configuration) |
@@ -312,8 +321,8 @@ Exit codes:
 | Code | Meaning |
 |---|---|
 | 0 | OK |
-| 1 | Monitoring found review triggers |
-| 2 | Input problem, blocking data issues (`data`), or the reviewer halted the workflow (the message names the rule) |
+| 1 | Monitoring found review triggers (or an unexpected error with a traceback) |
+| 2 | Input problem or missing file, blocking data issues (`data`), or the reviewer halted the workflow (the message names the rule) |
 | 3 | Market data unavailable |
 
 ## Configuration
@@ -395,9 +404,9 @@ Client files contain personal financial data, so keep them out of the repository
 |---|---|
 | `Python 3.10 or newer was not found` | Install Python (Step 1). On Windows, reinstall with "Add python.exe to PATH" ticked, then open a new terminal |
 | `permission denied: ./ra` (Mac/Linux) | Run `chmod +x ra setup.sh` once |
-| `INPUT PROBLEM: …` | The profile or answers are invalid. The message says which field. For `universe`, it lists the categories and ETFs |
+| `INPUT PROBLEM: …` | The profile or answers are invalid, or the choice can't work. The message says why: a field, the `universe` (it lists the categories and ETFs), category limits the chosen ETFs can't satisfy, or no mix of the chosen ETFs meeting the client's risk limit. For that last one, add lower-risk ETFs, such as Bond or Risk-free Treasury ETFs |
 | `MARKET DATA UNAVAILABLE` | Yahoo couldn't be reached. Check your internet, VPN or firewall, wait a minute (rate limit) and retry |
-| `WORKFLOW HALTED at review_…` | The reviewer found a real problem. The message names the rule. A common one is that no mix of the chosen ETFs meets the client's risk limit; add lower-risk ETFs such as Bond or Risk-free Treasury ETFs |
+| `WORKFLOW HALTED at review_…` | The independent reviewer found a real problem, usually in the market data (e.g. an ETF with too little history on the analysis date). The message names the rule, and the details are in `client_name_halted.json` |
 | The environment seems broken | `./setup.sh --fresh` (Windows: `.\setup.bat --fresh`) |
 | Odd data warnings | Delete `.cache` and re-run `./ra data` |
 
