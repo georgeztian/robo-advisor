@@ -94,14 +94,8 @@ The menu is defined in `robo_advisor/config/default.yaml`, and each fund's facts
 
 ---
 
-## Step-by-step: from nothing to a client report
+## How to use it
 
-Commands are shown for both systems:
-
-- **Mac/Linux** use the **Terminal** app and write `./ra`.
-- **Windows** uses **PowerShell** and writes `.\ra`, with `\` in file paths.
-
-Type each command and press Enter.
 
 ### Step 1: Install Python and Git (once)
 1. **Python 3.10 or newer:** https://www.python.org/downloads/
@@ -150,7 +144,7 @@ automatically when it is out of date.
 
 #### Route A: Answer the questions on the command line (easiest)
 ```
-./ra run --interactive --out clients/jane
+./ra run --interactive --out clients/client_name
 ```
 The app asks, in order:
 
