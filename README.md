@@ -31,24 +31,41 @@ the spec. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Quick start
 
+New to Python? Follow the step-by-step guide in [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
+
+**1. One-time setup.** The setup script creates a private Python environment in `.venv` and
+installs the app into it, with Yahoo Finance support and the test tools:
+
 ```bash
-pip install -e ".[dev]"            # add ".[yahoo]" for live Yahoo Finance data
-robo-advisor run --profile examples/client_target.json --timeline
-robo-advisor run --profile examples/client_no_target.json
-robo-advisor run --interactive     # answer the questionnaire in the terminal
-open out/alex_target_report.html   # dashboard; out/alex_target_audit.json holds the audit trail
+./setup.sh              # Windows: .\setup.bat     (--fresh rebuilds the environment)
 ```
+
+**2. Run it through the `ra` launcher.** It always uses `.venv`, so there's nothing to
+activate, and it runs the setup first if `.venv` is missing:
+
+```bash
+./ra run --profile examples/client_target.json --timeline      # Windows: .\ra ...
+./ra run --profile examples/client_no_target.json
+./ra run --interactive                                         # answer the questionnaire
+./ra data --provider yahoo                                     # download + validate real prices
+./ra run --profile examples/client_target.json --provider yahoo --as-of today
+./ra test                                                      # run the test suite
+open out/alex_target_report.html   # the dashboard; out/alex_target_audit.json holds the audit trail
+```
+
+If you manage environments yourself, `pip install -e ".[yahoo,dev]"` followed by
+`robo-advisor <command>` works as well.
 
 Ongoing monitoring (spec §18) works from a prior audit bundle. In the updated profile,
 `initial_investment` is the current portfolio value.
 
 ```bash
-robo-advisor monitor --prior out/alex_target_audit.json --profile updated_profile.json
+./ra monitor --prior out/alex_target_audit.json --profile updated_profile.json
 ```
 
 Other commands:
-- `robo-advisor graph` prints the workflow graph as mermaid.
-- `robo-advisor questionnaire` prints the configured questions and scores.
+- `./ra graph` prints the workflow graph as mermaid.
+- `./ra questionnaire` prints the configured questions and scores.
 - `python tools/extract_docx.py robo-advisor.docx` re-extracts the spec, including OMML equations.
 
 ## Data
@@ -64,10 +81,9 @@ Other commands:
 The default provider is `synthetic`, so the project runs offline. For real prices:
 
 ```bash
-pip install -e ".[yahoo]"                                   # installs yfinance
-robo-advisor data --provider yahoo                          # download, cache and validate the ETFs
-robo-advisor run --profile examples/client_target.json --provider yahoo --as-of today
-robo-advisor run --profile examples/client_target.json --provider yahoo --risk-free fred   # Treasury rate
+./ra data --provider yahoo                                  # download, cache and validate the ETFs
+./ra run --profile examples/client_target.json --provider yahoo --as-of today
+./ra run --profile examples/client_target.json --provider yahoo --risk-free fred   # Treasury rate
 ```
 
 To make Yahoo the default, set `data.provider: yahoo` (and optionally `risk_free_source: fred`)
@@ -95,7 +111,7 @@ How Yahoo data is handled (`robo_advisor/data/providers.py`):
 a fake yfinance that reproduces Yahoo's format and quirks (see `tests/fake_yfinance.py`), then
 runs the full workflow, reviewer included.
 
-If `robo-advisor data` reports `MARKET DATA UNAVAILABLE`, Yahoo was not reachable from your
+If `./ra data` reports `MARKET DATA UNAVAILABLE`, Yahoo was not reachable from your
 machine: check your connection or proxy and retry. Any tickers already cached are reused.
 
 ## Configuration
