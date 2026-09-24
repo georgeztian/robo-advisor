@@ -148,6 +148,10 @@ def cmd_run(args) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     slug = _slug(client.profile.name)
+    if args.interactive:                       # keep the answers: rerun or edit them with --profile
+        saved = out / f"{slug}_profile.json"
+        saved.write_text(client.model_dump_json(indent=2, exclude={"as_of"}), encoding="utf-8")
+        print(f"\nSaved your answers to {saved} (rerun with --profile {saved})")
     try:
         res = graph.run({"client": client}, parallel=not args.sequential)
     except DataUnavailableError as e:
