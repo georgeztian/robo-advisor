@@ -50,12 +50,7 @@ a report is produced.
 | Crypto ETFs | IBIT |
 
 Clients choose from this menu category by category; nothing is included unless chosen.
-
-TQQQ (leveraged), the four income ETFs (option strategies) and IBIT (bitcoin) are marked
-**special risk**. When one of them is held, the report explains its specific risks.
-
-ETFs younger than 20 years use all the history they have and are flagged. SGOV, SPYI, JEPQ,
-JEPI, QQQI and IBIT have only 2–6 years, so treat their estimates with caution.
+Historical data is analyzed using up to 20 years of daily prices. ETFs younger than 20 years use all the history they have and are flagged.
 
 **Category limits** cap how much of the portfolio one category may take:
 
@@ -166,12 +161,12 @@ Results go to the folder given by `--out` (use one folder per client):
 
 | File | Contents |
 |---|---|
-| `jane_doe_report.html` | The recommendation report |
-| `jane_doe_profile.json` | The client's answers, saved so you can edit and re-run them (Route B, step B4) |
-| `jane_doe_audit.json` | The full audit trail; needed for later check-ins (Step 8) |
+| `client_name_report.html` | The recommendation report |
+| `client_name_profile.json` | The client's answers, saved so you can edit and re-run them (Route B, step B4) |
+| `client_name_audit.json` | The full audit trail; needed for later check-ins (Step 8) |
 
 #### Route B: Fill out a profile file
-**B1. Create the file**, for example `clients/john.json`. Create the `clients` folder first
+**B1. Create the file**, for example `clients/client_name.json`. Create the `clients` folder first
 if it doesn't exist (`mkdir clients`). Either:
 
 - copy a profile saved by Route A (`…_profile.json`) and change it, or
@@ -232,12 +227,12 @@ as an `INPUT PROBLEM` naming the field.
 
 **B4. Run it:**
 ```
-./ra run --profile clients/john.json --as-of today --out clients/john
+./ra run --profile clients/client_name.json --as-of today --out clients/client_name
 ```
 `--as-of today` analyses with data up to today. You can give a past date instead, e.g.
 `--as-of 2026-06-30`.
 
-The profile saved by Route A (`clients/jane/jane_doe_profile.json`) works the same way:
+The profile saved by Route A (`clients/client_name/client_name_profile.json`) works the same way:
 edit it and re-run with `--profile`.
 
 ### Step 6: Read the report
@@ -274,7 +269,7 @@ command. Each run overwrites that client's report and audit.
    value**. Update anything else that changed.
 2. Run:
    ```
-   ./ra monitor --prior clients/jane/jane_doe_audit.json --profile clients/jane/jane_updated.json
+   ./ra monitor --prior clients/client_name/client_name_audit.json --profile clients/client_name/client_name_updated.json
    ```
 3. It reports the performance since the last recommendation, and any **review triggers**:
    goal changed, contribution changed, target at risk, risk limit exceeded, market risk
@@ -343,7 +338,7 @@ optimization:
   goal: {target_probability: 0.90}
 ```
 ```
-./ra run --profile clients/john.json --config my.yaml --as-of today --out clients/john
+./ra run --profile clients/client_name.json --config my.yaml --as-of today --out clients/client_name
 ```
 
 ## Market data
