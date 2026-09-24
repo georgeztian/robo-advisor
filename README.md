@@ -240,7 +240,7 @@ Open the report in your browser:
 
 | Mac | Windows |
 |---|---|
-| `open clients/client_name/client_name_report.html` | `start clients\client_name\client_name_report.html` |
+| `open clients/client_name/client_code_report.html` | `start clients\client_name\client_code_report.html` |
 
 From top to bottom:
 
@@ -269,7 +269,7 @@ command. Each run overwrites that client's report and audit.
    value**. Update anything else that changed.
 2. Run:
    ```
-   ./ra monitor --prior clients/client_name/client_name_audit.json --profile clients/client_name/client_name_updated.json
+   ./ra monitor --prior clients/client_name/client_code_audit.json --profile clients/client_name/client_code_updated.json
    ```
 3. It reports the performance since the last recommendation, and any **review triggers**:
    goal changed, contribution changed, target at risk, risk limit exceeded, market risk
