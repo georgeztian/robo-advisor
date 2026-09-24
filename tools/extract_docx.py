@@ -1,6 +1,6 @@
 """Extract a .docx (including MS Word OMML equations) to Markdown with LaTeX math.
 
-Usage:  python tools/extract_docx.py robo-advisor.docx > docs/SPEC.md
+Usage:  python tools/extract_docx.py robo-advisor.docx -o docs/SPEC.md
 
 Word stores equations as Office Math Markup (``m:oMath``), which plain-text
 extractors silently drop. This converter walks the OMML tree and emits
@@ -193,4 +193,12 @@ def extract(path):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("path", help=".docx file (or word/document.xml)")
-    sys.stdout.write(extract(ap.parse_args().path))
+    ap.add_argument("-o", "--output", help="write UTF-8 Markdown to this file instead of stdout")
+    args = ap.parse_args()
+    md = extract(args.path)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(md)
+    else:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.write(md)

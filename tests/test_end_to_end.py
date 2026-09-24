@@ -66,10 +66,41 @@ def test_monitoring_triggers(tmp_path, target_run, settings, provider):
 def test_cli_run_and_graph(tmp_path, capsys):
     cfg = tmp_path / "fast.yaml"
     cfg.write_text("simulation: {n_paths: 1500}\nscenarios: {n_paths: 500}\n"
-                   "optimization: {goal: {search_paths: 500, frontier_points: 8}}\nreview: {mc_paths: 1500}\n")
+                   "optimization: {goal: {search_paths: 500, frontier_points: 8}}\nreview: {mc_paths: 1500}\n",
+                   encoding="utf-8")
     rc = main(["run", "--profile", "examples/client_target.json", "--out", str(tmp_path), "--config", str(cfg)])
     assert rc == 0
     assert (tmp_path / "alex_target_report.html").exists()
-    audit = json.loads((tmp_path / "alex_target_audit.json").read_text())
+    audit = json.loads((tmp_path / "alex_target_audit.json").read_text(encoding="utf-8"))
     assert all(r["ok"] for r in audit["reviews"])
     assert main(["graph"]) == 0 and "review_portfolio_gate" in capsys.readouterr().out
+
+
+def test_cli_never_relies_on_platform_default_encoding(tmp_path):
+    """Windows defaults to cp1252 for files; every read/write must state UTF-8 explicitly.
+    EncodingWarning (python -X warn_default_encoding) flags any call that doesn't."""
+    import subprocess
+    import sys
+
+    cfg = tmp_path / "fast.yaml"
+    cfg.write_text("simulation: {n_paths: 800}\nscenarios: {n_paths: 300}\n"
+                   "optimization: {goal: {search_paths: 300, frontier_points: 6}}\nreview: {mc_paths: 800}\n",
+                   encoding="utf-8")
+    strict = [sys.executable, "-X", "warn_default_encoding", "-W", "error::EncodingWarning", "-m", "robo_advisor"]
+    out = tmp_path / "out"
+    run = subprocess.run(strict + ["run", "--profile", "examples/client_target.json", "--out", str(out),
+                                   "--config", str(cfg)], capture_output=True, text=True, encoding="utf-8")
+    assert run.returncode == 0, run.stderr[-2000:]
+    html = (out / "alex_target_report.html").read_text(encoding="utf-8")
+    assert "⚠" in html                                   # the non-ASCII banner that crashed on Windows
+    mon = subprocess.run(strict + ["monitor", "--prior", str(out / "alex_target_audit.json"), "--config", str(cfg)],
+                         capture_output=True, text=True, encoding="utf-8")
+    assert mon.returncode in (0, 1), mon.stderr[-2000:]      # 1 = review triggers found
+
+
+def test_profiles_saved_with_bom_are_accepted(tmp_path):
+    from robo_advisor.cli import _read
+    p = tmp_path / "profile.json"
+    with open("examples/client_target.json", "rb") as fh:
+        p.write_bytes(b"\xef\xbb\xbf" + fh.read())            # Notepad-style UTF-8 with BOM
+    assert _read(p).startswith("{")

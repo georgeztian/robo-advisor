@@ -47,6 +47,11 @@ def _as_of(value: str | None) -> dt.date | None:
     return dt.date.today() if value == "today" else dt.date.fromisoformat(value)
 
 
+def _read(path: str | Path) -> str:
+    """Read a user-edited text file: UTF-8, tolerating the BOM some Windows editors add."""
+    return Path(path).read_text(encoding="utf-8-sig")
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "client"
 
@@ -136,7 +141,7 @@ def interactive_client(s: Settings) -> ClientInput:
 
 def cmd_run(args) -> int:
     s = _settings(args)
-    client = interactive_client(s) if args.interactive else ClientInput.model_validate_json(Path(args.profile).read_text())
+    client = interactive_client(s) if args.interactive else ClientInput.model_validate_json(_read(args.profile))
     if args.as_of:
         client = client.model_copy(update={"as_of": _as_of(args.as_of)})
     graph = build_advisory_graph(s, _provider(s))
@@ -154,11 +159,11 @@ def cmd_run(args) -> int:
         audit = {"halted_at": e.node, "reason": str(e),
                  "reviews": [{"stage": r.stage, "findings": [vars(f) for f in r.findings]} for r in e.result.reviews],
                  "trace": [vars(t) for t in e.result.trace]}
-        (out / f"{slug}_audit.json").write_text(json.dumps(audit, indent=2, default=str))
+        (out / f"{slug}_audit.json").write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
         return 2
     html_path, audit_path = out / f"{slug}_report.html", out / f"{slug}_audit.json"
-    html_path.write_text(render(res, s, graph.to_mermaid()))
-    audit_path.write_text(json.dumps(audit_bundle(res), indent=2))
+    html_path.write_text(render(res, s, graph.to_mermaid()), encoding="utf-8")
+    audit_path.write_text(json.dumps(audit_bundle(res), indent=2), encoding="utf-8")
     st = res.state
     print(st["explanation"].headline)
     print(st["explanation"].risk_text)
@@ -178,8 +183,8 @@ def cmd_run(args) -> int:
 
 def cmd_monitor(args) -> int:
     s = _settings(args)
-    prior = json.loads(Path(args.prior).read_text())
-    client = (ClientInput.model_validate_json(Path(args.profile).read_text()) if args.profile
+    prior = json.loads(_read(args.prior))
+    client = (ClientInput.model_validate_json(_read(args.profile)) if args.profile
               else ClientInput.model_validate(prior["client"]))
     res = build_monitoring_graph(s, _provider(s)).run({"client": client, "prior": prior})
     rep = res.state["monitoring"]
@@ -279,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
     q = sub.add_parser("questionnaire", help="print the configured questionnaire")
     q.add_argument("--config")
     args = ap.parse_args(argv)
+    # never crash on a console that cannot display a character (e.g. legacy Windows code pages)
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     return {"run": cmd_run, "monitor": cmd_monitor, "data": cmd_data, "graph": cmd_graph,
             "questionnaire": cmd_questionnaire}[args.cmd](args)
 

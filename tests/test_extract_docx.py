@@ -21,4 +21,4 @@ def test_word_equations_are_extracted_as_latex():
 
 def test_spec_md_is_in_sync_with_docx():
     md = _extractor().extract(str(ROOT / "robo-advisor.docx"))
-    assert (ROOT / "docs" / "SPEC.md").read_text() == md
+    assert (ROOT / "docs" / "SPEC.md").read_text(encoding="utf-8") == md

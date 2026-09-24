@@ -9,7 +9,7 @@ FORBIDDEN = {"estimation", "optimization", "simulation", "benchmark", "projectio
 
 def test_reviewer_does_not_import_production_computations():
     for f in REVIEW.glob("*.py"):
-        tree = ast.parse(f.read_text())
+        tree = ast.parse(f.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.level > 0:
                 parts = set((node.module or "").split("."))
