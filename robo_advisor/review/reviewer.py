@@ -88,9 +88,12 @@ class Reviewer:
             adj_r = df["adj_close"].pct_change().to_numpy()[1:]
             tri = ind.tr_index_from_raw(df).to_numpy()
             raw_r = np.diff(tri) / tri[:-1]
-            err = float(np.nanmax(np.abs(adj_r - raw_r))) if len(raw_r) else 0.0
-            if err > self.s.data.adj_consistency_tol:
-                bad_adj[t] = err
+            gap = np.abs(adj_r - raw_r)
+            err = float(np.nanmax(gap)) if len(raw_r) else 0.0
+            n_bad = int(np.nansum(gap > self.s.data.adj_consistency_tol))
+            d = self.s.data
+            if err > d.adj_split_error or n_bad > max(d.adj_max_bad_days, d.adj_max_bad_fraction * len(df)):
+                bad_adj[t] = {"max_err": round(err, 4), "bad_days": n_bad}
         f(out, "R-DATA-05", "§3", "BLOCKER", not bad_adj,
           "adjusted prices consistent with raw close, splits and distributions (independent check)"
           if not bad_adj else f"inconsistent adjusted prices: {bad_adj}")
@@ -259,11 +262,12 @@ class Reviewer:
             wc, vc = (w_mv, v_mv) if r <= r_mv + 1e-12 else ind.resolve("min_vol", *args, min_return=r)
             if wc is None or vc > 0.9 * vol:
                 continue
-            term = ind.mc_terminal(wc, est.mu, est.cov, req.W0, req.C, req.months, every, thr, n, 991)
+            # with taxes on, drift at the after-tax return (the engine taxes each path explicitly)
+            term = ind.mc_terminal(wc, mu_l, est.cov, req.W0, req.C, req.months, every, thr, n, 991)
             pc = float((term >= req.target).mean())
             if pc >= p + z * se:
                 offenders.append((round(vc, 4), round(pc, 3)))
-        sev = "BLOCKER" if not req.client.taxes.enabled else "WARN"   # reviewer MC is pre-tax
+        sev = "BLOCKER" if not req.client.taxes.enabled else "WARN"   # after-tax drift is an approximation
         f(out, "R-PORT-13", "§7", sev, not offenders,
           f"no portfolio with >=10% lower volatility than {vol:.2%} reaches the target probability "
           f"{p:.0%} (independent frontier + MC)" if not offenders else

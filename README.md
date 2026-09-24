@@ -56,8 +56,47 @@ Other commands:
 | Provider | Use |
 |---|---|
 | `synthetic` (default) | Deterministic simulated histories, calibrated to each ETF's real inception date, typical risk/return, correlations, distributions, splits and three stress episodes. Used for offline demos and tests. **Every report built on it is watermarked SYNTHETIC.** |
-| `yahoo` | Live adjusted histories via `yfinance` (`pip install -e ".[yahoo]"`, `--provider yahoo`), cached as CSV. |
+| `yahoo` | Real daily histories via `yfinance` (`pip install -e ".[yahoo]"`, `--provider yahoo`), cached as CSV. See below. |
 | `csv` | `data/prices/<TICKER>.csv` with `date, close, adj_close[, dividend, split_ratio]`. |
+
+## Using real market data
+
+The default provider is `synthetic`, so the project runs offline. For real prices:
+
+```bash
+pip install -e ".[yahoo]"                                   # installs yfinance
+robo-advisor data --provider yahoo                          # download, cache and validate the ETFs
+robo-advisor run --profile examples/client_target.json --provider yahoo --as-of today
+robo-advisor run --profile examples/client_target.json --provider yahoo --risk-free fred   # Treasury rate
+```
+
+To make Yahoo the default, set `data.provider: yahoo` (and optionally `risk_free_source: fred`)
+in a YAML file and pass it with `--config`.
+
+How Yahoo data is handled (`robo_advisor/data/providers.py`):
+- **Download.** It fetches full daily history with unadjusted close, adjusted close,
+  dividends, splits and fund capital-gain distributions. yfinance's price repair is switched
+  on, which fixes 100× errors and bad dividend adjustments.
+- **Normalization.** Split-adjusted prices and dividends are converted back to raw values,
+  so the validator can check them against the adjusted series. A dividend Yahoo reports on a
+  non-trading day moves to the next trading day. Duplicate rows are dropped, and timezones are
+  removed.
+- **Retries.** Rate limits and network errors are retried with exponential backoff.
+- **Cache.** Each ticker is cached in `.cache/prices/<TICKER>.csv`, so repeat runs work
+  offline. A cache that ends before the requested date is refreshed, at most once every
+  12 hours. Delete the folder to force a full re-download.
+- **Validation.** Validation follows the NYSE trading calendar. An isolated bad day in
+  Yahoo's adjusted prices is reported as a warning. A missed split adjustment, or errors on
+  many days, blocks the run.
+- **Risk-free rate.** With `--risk-free fred`, the risk-free rate is the FRED 3-month T-bill
+  rate (series `DTB3`). If FRED can't be reached, it falls back to the BIL T-bill ETF.
+
+`tests/test_yahoo_provider.py` checks this whole path offline. It feeds the real provider code
+a fake yfinance that reproduces Yahoo's format and quirks (see `tests/fake_yfinance.py`), then
+runs the full workflow, reviewer included.
+
+If `robo-advisor data` reports `MARKET DATA UNAVAILABLE`, Yahoo was not reachable from your
+machine: check your connection or proxy and retry. Any tickers already cached are reused.
 
 ## Configuration
 

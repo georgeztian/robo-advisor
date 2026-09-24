@@ -44,7 +44,7 @@ def backtest(monthly: pd.DataFrame, w: np.ndarray, W0: float, C: float, rebal: R
 
 def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, W0: float, C: float,
             as_of: dt.date, years: int, rebal: RebalancingCfg, benchmark: str, rf_ticker: str,
-            rf_fallback: float) -> BenchmarkResult:
+            rf_fallback: float, rf_series: pd.Series | None = None) -> BenchmarkResult:
     held = [t for t, x in zip(tickers, w) if abs(x) > 1e-9]
     wh = np.array([x for x in w if abs(x) > 1e-9])
     start_req = pd.Timestamp(as_of) - pd.DateOffset(years=years)
@@ -70,6 +70,10 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
         r = month_end_prices(frames[rf_ticker][["adj_close"]])["adj_close"].pct_change()
         rf_m = r.reindex(monthly.index).dropna()
     rf = float(rf_m.mean() * 12) if rf_m is not None and len(rf_m) > 6 else rf_fallback
+    if rf_series is not None:                         # Treasury yield series, same period
+        rs = rf_series[(rf_series.index > monthly.index[0].start_time) & (rf_series.index <= pd.Timestamp(as_of))]
+        if len(rs) > 20:
+            rf = float(rs.mean())
 
     # time-weighted index (unit lump sum) drives every return metric, so the comparison is
     # well defined even with a zero initial investment; wealth paths scale it / add contributions

@@ -15,7 +15,7 @@ import pandas as pd
 
 from .. import benchmark as bm
 from ..config import RebalancingCfg, Settings
-from ..data.providers import DataProvider
+from ..data.providers import DataProvider, DataUnavailableError, fetch_treasury_rate
 from ..data.validation import validate
 from ..estimation import estimate, portfolio_risk_stats
 from ..explain import explain
@@ -65,6 +65,8 @@ class IntakeAgent:
         s = self.sv.settings
         client: ClientInput = st["client"]
         as_of = last_business_day(client.as_of or dt.date.today())
+        if as_of > dt.date.today():
+            raise ValueError(f"as_of {as_of} is in the future; market data only exists up to today")
         tickers = resolve_universe(client.universe, s.universe.default, s.universe.optional_extra)
         pref = client.preferences
         method = pref.optimization_method or s.optimization.default_method
@@ -111,9 +113,20 @@ class MarketDataAgent:
 
     def __call__(self, st):
         req: Request = st["request"]
-        p = self.sv.provider
+        p, d = self.sv.provider, self.sv.settings.data
         frames = p.fetch(req.data_tickers, req.window_start, req.as_of)
-        return {"market": MarketData(frames, req.as_of, p.name, p.synthetic)}
+        md = MarketData(frames, req.as_of, p.name, p.synthetic)
+        if d.risk_free_source == "fred":
+            if p.synthetic:
+                md.notes.append("risk-free: FRED not used with synthetic data; T-bill ETF proxy used")
+            else:
+                try:
+                    md.risk_free_series = fetch_treasury_rate(d.fred_series, req.window_start, req.as_of,
+                                                              d.cache_dir)
+                    md.risk_free_source = f"FRED {d.fred_series} Treasury bill rate"
+                except DataUnavailableError as e:
+                    md.notes.append(f"risk-free: {e}; T-bill ETF proxy used instead")
+        return {"market": md}
 
 
 class DataValidationAgent:
@@ -126,7 +139,9 @@ class DataValidationAgent:
 
     def __call__(self, st):
         req, market = st["request"], st["market"]
-        return {"data_quality": validate(market.frames, req.window_start, req.as_of, self.sv.settings.data)}
+        dq = validate(market.frames, req.window_start, req.as_of, self.sv.settings.data)
+        dq.warnings.extend(market.notes)
+        return {"data_quality": dq}
 
 
 class EstimationAgent:
@@ -140,7 +155,8 @@ class EstimationAgent:
     def __call__(self, st):
         req, market = st["request"], st["market"]
         s = self.sv.settings
-        return {"estimates": estimate(market.frames, req.tickers, req.as_of, req.window_start, s.data, s.estimation)}
+        return {"estimates": estimate(market.frames, req.tickers, req.as_of, req.window_start, s.data, s.estimation,
+                                      market.risk_free_series, market.risk_free_source)}
 
 
 class TaxAgent:
@@ -275,7 +291,8 @@ class BenchmarkAgent:
         req, market, port = st["request"], st["market"], st["portfolio"]
         return {"benchmark": bm.compare(market.frames, req.tickers, port.weights, req.W0, req.C, req.as_of,
                                         s.benchmark.years, req.rebalancing, s.data.benchmark,
-                                        s.data.risk_free_ticker, s.data.risk_free_fallback)}
+                                        s.data.risk_free_ticker, s.data.risk_free_fallback,
+                                        market.risk_free_series)}
 
 
 class ProjectionAgent:

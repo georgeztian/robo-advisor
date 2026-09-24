@@ -18,7 +18,8 @@ from pathlib import Path
 from .agents.advisory import build_advisory_graph
 from .agents.monitor import build_monitoring_graph
 from .config import Settings, load_settings
-from .data.providers import make_provider
+from .data.providers import DataUnavailableError, make_provider
+from .data.validation import validate
 from .graph.engine import GraphHalted
 from .models import ClientInput
 from .optimization.methods import METHODS
@@ -26,12 +27,24 @@ from .report.html import audit_bundle, render
 
 
 def _settings(args) -> Settings:
-    over = {"data": {"provider": args.provider}} if getattr(args, "provider", None) else None
-    return load_settings(getattr(args, "config", None), over)
+    data = {}
+    if getattr(args, "provider", None):
+        data["provider"] = args.provider
+    if getattr(args, "risk_free", None):
+        data["risk_free_source"] = args.risk_free
+    return load_settings(getattr(args, "config", None), {"data": data} if data else None)
 
 
 def _provider(s: Settings):
-    return make_provider(s.data.provider, csv_dir=s.data.csv_dir, cache_dir=s.data.cache_dir)
+    d = s.data
+    return make_provider(d.provider, csv_dir=d.csv_dir, cache_dir=d.cache_dir, retries=d.request_retries,
+                         refresh_hours=d.cache_refresh_hours)
+
+
+def _as_of(value: str | None) -> dt.date | None:
+    if not value:
+        return None
+    return dt.date.today() if value == "today" else dt.date.fromisoformat(value)
 
 
 def _slug(name: str) -> str:
@@ -124,12 +137,18 @@ def interactive_client(s: Settings) -> ClientInput:
 def cmd_run(args) -> int:
     s = _settings(args)
     client = interactive_client(s) if args.interactive else ClientInput.model_validate_json(Path(args.profile).read_text())
+    if args.as_of:
+        client = client.model_copy(update={"as_of": _as_of(args.as_of)})
     graph = build_advisory_graph(s, _provider(s))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     slug = _slug(client.profile.name)
     try:
         res = graph.run({"client": client}, parallel=not args.sequential)
+    except DataUnavailableError as e:
+        print(f"\nMARKET DATA UNAVAILABLE: {e}\nCheck your internet connection (Yahoo Finance must be "
+              "reachable), then retry; cached tickers are reused.", file=sys.stderr)
+        return 3
     except GraphHalted as e:
         print(f"\nWORKFLOW HALTED at {e.node}: {e}", file=sys.stderr)
         audit = {"halted_at": e.node, "reason": str(e),
@@ -175,6 +194,48 @@ def cmd_monitor(args) -> int:
     return 1 if rep.triggers else 0
 
 
+def cmd_data(args) -> int:
+    """Download (or read from cache) and validate market data without running an analysis."""
+    s = _settings(args)
+    as_of = _as_of(args.as_of) or dt.date.today()
+    while as_of.weekday() >= 5:
+        as_of -= dt.timedelta(days=1)
+    try:
+        start = as_of.replace(year=as_of.year - s.data.lookback_years)
+    except ValueError:
+        start = as_of.replace(year=as_of.year - s.data.lookback_years, day=28)
+    tickers = [t.upper() for t in args.tickers] if args.tickers else list(s.universe.default)
+    tickers = sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker})
+    prov = _provider(s)
+    print(f"Fetching {len(tickers)} tickers from {prov.name} ({start} to {as_of}) ...")
+    try:
+        frames = prov.fetch(tickers, start, as_of)
+    except DataUnavailableError as e:
+        print(f"MARKET DATA UNAVAILABLE: {e}", file=sys.stderr)
+        return 3
+    dq = validate(frames, start, as_of, s.data)
+    print(f"\n{'ETF':<6}{'first':>12}{'last':>12}{'years':>7}{'missing':>9}{'splits':>8}{'dists':>7}"
+          f"{'adj err':>10}  status")
+    for t, q in dq.tickers.items():
+        status = "BLOCKED" if any(b.startswith(f"{t}:") for b in dq.blocking) else (
+            "short history" if not q.meets_min_history else "ok")
+        print(f"{t:<6}{str(q.first_obs):>12}{str(q.last_obs):>12}{q.years_available:>7.1f}{q.missing_days:>9}"
+              f"{q.n_splits:>8}{q.n_distributions:>7}{q.adj_consistency_max_error:>10.1e}  {status}")
+    for w in dq.warnings:
+        print(f"  warning: {w}")
+    for b in dq.blocking:
+        print(f"  BLOCKER: {b}")
+    if s.data.risk_free_source == "fred" and not prov.synthetic:
+        from .data.providers import fetch_treasury_rate
+        try:
+            rf = fetch_treasury_rate(s.data.fred_series, start, as_of, s.data.cache_dir)
+            print(f"\nRisk-free: FRED {s.data.fred_series}, {len(rf)} observations, mean {rf.mean():.2%}")
+        except DataUnavailableError as e:
+            print(f"\nRisk-free: {e} (the T-bill ETF proxy will be used)")
+    print("\nData OK." if not dq.blocking else "\nData has blocking issues (see above).")
+    return 0 if not dq.blocking else 2
+
+
 def cmd_graph(args) -> int:
     s = load_settings()
     g = (build_monitoring_graph if args.monitoring else build_advisory_graph)(s, make_provider("synthetic"))
@@ -205,15 +266,21 @@ def main(argv: list[str] | None = None) -> int:
     m = sub.add_parser("monitor", help="re-assess a prior recommendation")
     m.add_argument("--prior", required=True, help="audit JSON from a previous run")
     m.add_argument("--profile", help="updated client profile JSON (initial_investment = current value)")
-    for p in (r, m):
+    d = sub.add_parser("data", help="download/validate market data (no analysis)")
+    d.add_argument("--tickers", nargs="*", help="default: the full ETF universe")
+    for p in (r, m, d):
         p.add_argument("--config", help="YAML overriding config/default.yaml")
         p.add_argument("--provider", choices=["synthetic", "csv", "yahoo"])
+        p.add_argument("--risk-free", choices=["etf", "fred"], help="risk-free source (default: config)")
+    for p in (r, d):
+        p.add_argument("--as-of", help="analysis date YYYY-MM-DD or 'today' (overrides the profile)")
     gp = sub.add_parser("graph", help="print the workflow graph (mermaid)")
     gp.add_argument("--monitoring", action="store_true")
     q = sub.add_parser("questionnaire", help="print the configured questionnaire")
     q.add_argument("--config")
     args = ap.parse_args(argv)
-    return {"run": cmd_run, "monitor": cmd_monitor, "graph": cmd_graph, "questionnaire": cmd_questionnaire}[args.cmd](args)
+    return {"run": cmd_run, "monitor": cmd_monitor, "data": cmd_data, "graph": cmd_graph,
+            "questionnaire": cmd_questionnaire}[args.cmd](args)
 
 
 if __name__ == "__main__":
