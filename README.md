@@ -104,9 +104,9 @@ git clone https://github.com/georgeztian/robo-advisor.git
 cd robo-advisor
 ```
 If you don't use Git: on the GitHub page, choose **Code → Download ZIP**, unzip it, and `cd`
-into the unzipped folder.
+into the unzipped folder (set working directory to the project folder).
 
-### Step 3: First run (installation is automatic)
+### Step 3: Install private Python environment
 | Mac / Linux | Windows |
 |---|---|
 | `./ra etfs` | `.\ra etfs` |
