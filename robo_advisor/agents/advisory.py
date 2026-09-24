@@ -115,7 +115,7 @@ class MarketDataAgent:
         req: Request = st["request"]
         p, d = self.sv.provider, self.sv.settings.data
         frames = p.fetch(req.data_tickers, req.window_start, req.as_of)
-        md = MarketData(frames, req.as_of, p.name, p.synthetic)
+        md = MarketData(frames, req.as_of, p.name, p.synthetic, notes=list(getattr(p, "notes", [])))
         if d.risk_free_source == "fred":
             if p.synthetic:
                 md.notes.append("risk-free: FRED not used with synthetic data; T-bill ETF proxy used")

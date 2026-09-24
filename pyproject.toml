@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-yahoo = ["yfinance>=0.2.40"]
+yahoo = ["yfinance[repair]>=0.2.40"]   # [repair] adds scipy + scikit-learn for price repair
 dev = ["pytest>=7"]
 
 [project.scripts]

@@ -343,6 +343,7 @@ class YahooProvider:
                  repair: bool = True, refresh_hours: float = 12.0):
         self.cache = Path(cache_dir) if cache_dir else None
         self.retries, self.backoff, self.repair, self.refresh_hours = retries, backoff, repair, refresh_hours
+        self.notes: list[str] = []                 # surfaced as data-quality warnings
 
     @staticmethod
     def _yf():
@@ -358,17 +359,31 @@ class YahooProvider:
 
         yf = self._yf()
         last: Exception | None = None
-        for attempt in range(self.retries):
+        attempt = 0
+        while attempt < self.retries:
             try:
                 h = yf.Ticker(t).history(period="max", interval="1d", auto_adjust=False, actions=True,
                                          repair=self.repair, raise_errors=True)
                 return normalize_yahoo(h, t)
             except DataUnavailableError:
                 raise
+            except ImportError as e:
+                # yfinance's price repair needs optional libraries (scipy, scikit-learn). Without
+                # them, download unrepaired data rather than fail; validation still checks it.
+                if not self.repair:
+                    raise DataUnavailableError(f"yfinance failed for {t}: {e}") from e
+                self.repair = False
+                self.notes.append(f"Yahoo price repair disabled (missing library: {e.name or e}); "
+                                  "reinstall with pip install -e \".[yahoo]\" to enable it")
+                continue                           # retry immediately, not counted as an attempt
+            except (TypeError, ValueError, KeyError, AttributeError) as e:
+                # programming / data-format errors are not transient: do not retry
+                raise DataUnavailableError(f"unexpected Yahoo data for {t}: {type(e).__name__}: {e}") from e
             except Exception as e:                 # rate limits, timeouts, transient HTTP errors
                 last = e
-                if attempt + 1 < self.retries:
-                    time.sleep(self.backoff * 2**attempt)
+                attempt += 1
+                if attempt < self.retries:
+                    time.sleep(self.backoff * 2**(attempt - 1))
         raise DataUnavailableError(f"could not download {t} from Yahoo after {self.retries} attempts: "
                                    f"{type(last).__name__}: {last}")
 
