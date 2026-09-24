@@ -245,7 +245,7 @@ Open the report in your browser:
 
 | Mac | Windows |
 |---|---|
-| `open clients/jane/jane_doe_report.html` | `start clients\jane\jane_doe_report.html` |
+| `open clients/client_name/client_name_report.html` | `start clients\client_name\client_name_report.html` |
 
 From top to bottom:
 
