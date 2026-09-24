@@ -95,7 +95,7 @@ class ClientInput(BaseModel):
     goal: Goal
     capacity_answers: dict[str, str]
     tolerance_answers: dict[str, str]
-    universe: list[str] | None = None                 # None -> full default universe (spec §3)
+    universe: list[str] | None = None     # tickers and/or category names chosen by the client (required)
     constraints: Constraints = Constraints()
     taxes: TaxInput = TaxInput()
     preferences: Preferences = Preferences()
@@ -188,10 +188,6 @@ class Estimates:
     mu_after_tax: np.ndarray | None = None
     psd_repaired: bool = False
     risk_free_source: str = "T-bill ETF proxy"
-
-    def mu_for_optimizer(self) -> np.ndarray:
-        """Spec §5: the optimizer uses after-tax returns when taxes are enabled."""
-        return self.mu_after_tax if self.mu_after_tax is not None else self.mu
 
 
 @dataclass

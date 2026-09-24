@@ -1,6 +1,8 @@
 {
-  "profile": {"name": "Jordan Growth", "age": 45},
-  "as_of": "2026-09-23",
+  "profile": {
+    "name": "Jordan Growth",
+    "age": 45
+  },
   "goal": {
     "has_target": false,
     "initial_investment": 250000,
@@ -27,10 +29,31 @@
     "crash_behavior": "held",
     "preserve_vs_growth": "mostly_growth"
   },
-  "universe": null,
-  "constraints": {"allow_short": false},
-  "taxes": {"enabled": true, "ordinary_rate": 0.32, "qualified_dividend_rate": 0.15,
-            "ltcg_rate": 0.15, "stcg_rate": 0.32, "state_rate": 0.05},
-  "preferences": {"optimization_method": "mean_variance", "rebalancing_type": "threshold",
-                  "rebalancing_threshold": 0.05}
+  "universe": [
+    "Equity ETFs",
+    "Bond ETFs",
+    "Risk-free Short-term Treasury ETFs",
+    "Commodity ETFs",
+    "International Equity ETFs",
+    "Real Estate ETFs",
+    "Dividend ETFs",
+    "Income ETFs",
+    "IBIT"
+  ],
+  "constraints": {
+    "allow_short": false
+  },
+  "taxes": {
+    "enabled": true,
+    "ordinary_rate": 0.32,
+    "qualified_dividend_rate": 0.15,
+    "ltcg_rate": 0.15,
+    "stcg_rate": 0.32,
+    "state_rate": 0.05
+  },
+  "preferences": {
+    "optimization_method": "mean_variance",
+    "rebalancing_type": "threshold",
+    "rebalancing_threshold": 0.05
+  }
 }

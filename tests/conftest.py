@@ -33,6 +33,7 @@ def provider():
 
 def load_client(name: str, **update) -> ClientInput:
     data = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
+    data["as_of"] = AS_OF.isoformat()        # example profiles carry no date; tests pin one
     for k, v in update.items():
         data[k] = v
     return ClientInput.model_validate(data)

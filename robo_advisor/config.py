@@ -46,8 +46,29 @@ class Questionnaire(BaseModel):
 
 
 class UniverseCfg(BaseModel):
-    default: list[str]
-    optional_extra: list[str] = []
+    """ETFs offered to clients, grouped into categories (the client chooses from these)."""
+
+    categories: dict[str, list[str]]
+
+    @model_validator(mode="after")
+    def _known_and_unique(self):
+        from .universe import CATALOG
+
+        seen: dict[str, str] = {}
+        for cat, tickers in self.categories.items():
+            if not tickers:
+                raise ValueError(f"universe category {cat!r} is empty")
+            for t in tickers:
+                if t not in CATALOG:
+                    raise ValueError(f"universe ticker {t} ({cat}) has no entry in the ETF catalog")
+                if t in seen:
+                    raise ValueError(f"universe ticker {t} is listed in both {seen[t]!r} and {cat!r}")
+                seen[t] = cat
+        return self
+
+    @property
+    def tickers(self) -> list[str]:
+        return [t for ts in self.categories.values() for t in ts]
 
 
 class DataCfg(BaseModel):

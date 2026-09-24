@@ -1,139 +1,358 @@
 # robo-advisor
 
-An end-to-end, goal-based robo-advisor in Python, implementing the specification in
-`robo-advisor.docx`. The extracted text, with every Word equation converted to LaTeX, is in
-[`docs/SPEC.md`](docs/SPEC.md). It covers:
+A goal-based robo-advisor in Python. For each client it does the following:
 
-- **Risk profiling.** Risk capacity and risk tolerance are scored separately, and the mapped
-  score is min(capacity, tolerance). The score maps to a volatility limit through bands that
-  are configurable, not hard-coded.
-- **Investment universe.** The client picks any subset of 16 ETFs (VOO, VTI, BND, TLT, BIL,
-  GLD, QQQ, TQQQ, VXUS, VT, VWO, VNQ, SCHH, SCHD, VYM, DGRO). SGOV is an optional extra.
-- **Data validation.** Inception dates, 20-year coverage, gaps, and whether adjusted prices
-  agree with splits and distributions. Look-ahead is guarded against.
-- **Estimation.** Expected return, volatility, covariance, drawdown, VaR/CVaR, beta, Sharpe
-  and Sortino, from up to 20 years of history.
-- **Constraints and taxes.** Short sales with a gross-leverage limit, a maximum position size,
-  and an optional estimated tax model.
-- **Optimization.** *Target* clients get the minimum-risk portfolio that reaches
-  P(F_T ≥ F\*) ≥ p. *No-target* clients get the maximum expected return within their risk
-  limit. Also available: minimum volatility, maximum Sharpe, CVaR, target-return, risk parity
-  and maximum diversification.
-- **Projection.** A 10,000-path Monte Carlo with contributions, rebalancing and taxes;
-  scenario analysis; a deterministic FV; and a 10-year S&P 500 comparison using the same
-  contributions.
-- **Client output.** A self-contained HTML dashboard with explanations, plus a JSON audit
-  bundle and ongoing monitoring.
+- **Risk profile.** Scores risk *capacity* (the financial ability to take losses) and risk
+  *tolerance* (the willingness to) separately, and turns them into a risk limit.
+- **Portfolio.** Builds a portfolio from the ETFs the client chooses, category by category.
+- **Projection.** Simulates 10,000 possible futures, compares the portfolio with the
+  S&P 500 over the last 10 years, and explains the recommendation in a self-contained HTML
+  report.
 
-The work is split among **agents** in a contract-checked **workflow graph** that runs
-independent steps in parallel. An **independent reviewer agent** checks every stage against
-the spec. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+The work is done by a graph of cooperating **agents**. An **independent reviewer agent**
+re-checks the data and the calculations, and checks every rule of the specification, before
+a report is produced.
 
-## Quick start
+- Original specification: [`robo-advisor.docx`](robo-advisor.docx), extracted with its
+  equations to [`docs/SPEC.md`](docs/SPEC.md).
+- Technical design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-New to Python? Follow the step-by-step guide in [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
+> Results are model estimates based on historical data, not guarantees or personalized
+> investment, legal or tax advice.
 
-Everything runs through the `ra` launcher (Windows: `.\ra`). Installation is automatic:
-- On the first run, `ra` creates a private Python environment in `.venv` and installs the app
-  into it, with Yahoo Finance support and the test tools.
-- On every later run it checks that environment. It reinstalls if the environment is damaged,
-  and updates it if the dependency list in `pyproject.toml` changed (e.g. after `git pull`).
+---
 
-There is nothing to activate. `./setup.sh` / `.\setup.bat` installs up front if you prefer,
-and `--fresh` rebuilds the environment from scratch.
+## What it does
 
-```bash
-./ra run --profile examples/client_target.json --timeline      # Windows: .\ra ...
-./ra run --profile examples/client_no_target.json
-./ra run --interactive                                         # answer the questionnaire
-./ra data --provider yahoo                                     # download + validate real prices
-./ra run --profile examples/client_target.json --provider yahoo --as-of today
-./ra test                                                      # run the test suite
-open out/alex_target_report.html   # the dashboard; out/alex_target_audit.json holds the audit trail
-```
-
-If you manage environments yourself, `pip install -e ".[yahoo,dev]"` followed by
-`robo-advisor <command>` works as well.
-
-Ongoing monitoring (spec §18) works from a prior audit bundle. In the updated profile,
-`initial_investment` is the current portfolio value.
-
-```bash
-./ra monitor --prior out/alex_target_audit.json --profile updated_profile.json
-```
-
-Other commands:
-- `./ra graph` prints the workflow graph as mermaid.
-- `./ra questionnaire` prints the configured questions and scores.
-- `python tools/extract_docx.py robo-advisor.docx` re-extracts the spec, including OMML equations.
-
-## Data
-
-| Provider | Use |
+| Stage | What happens |
 |---|---|
-| `synthetic` (default) | Deterministic simulated histories, calibrated to each ETF's real inception date, typical risk/return, correlations, distributions, splits and three stress episodes. Used for offline demos and tests. **Every report built on it is watermarked SYNTHETIC.** |
-| `yahoo` | Real daily histories via `yfinance` (`pip install -e ".[yahoo]"`, `--provider yahoo`), cached as CSV. See below. |
-| `csv` | `data/prices/<TICKER>.csv` with `date, close, adj_close[, dividend, split_ratio]`. |
+| Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 7 risk-tolerance questions, ETF choice by category, short-selling / position / tax preferences |
+| Risk profile | Capacity and tolerance scores (0–100) are kept separate. **Mapped score = min(capacity, tolerance)**, which maps to a volatility limit (5 %–25 %, configurable) |
+| Market data | Up to 20 years of daily prices (real data from Yahoo Finance, or built-in simulated data), validated for gaps, splits, distributions and look-ahead |
+| Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance of reaching the target. **No target:** the highest expected return within the risk limit. Six other methods are available |
+| Projection | 10,000-path Monte Carlo with contributions, rebalancing and optional taxes; conservative/base/optimistic scenarios; a deterministic future value |
+| Benchmark | The last 10 years against the S&P 500, with the same money invested |
+| Review | An independent reviewer runs about 60 checks at 4 checkpoints and stops the run on any blocking error |
+| Output | HTML report, JSON audit trail, and the client's saved answers; later check-ins raise review triggers |
 
-## Using real market data
+### The ETF menu: 25 ETFs in 9 categories
 
-The default provider is `synthetic`, so the project runs offline. For real prices:
+| Category | ETFs |
+|---|---|
+| Equity ETFs | SPY, VOO, VTI, QQQ, TQQQ |
+| Bond ETFs | BND, TLT, HYG |
+| Risk-free Short-term Treasury ETFs | BIL, SGOV |
+| Commodity ETFs | GLD, SLV |
+| International Equity ETFs | VXUS, IEFA, VWO |
+| Real Estate ETFs | VNQ, SCHH |
+| Dividend ETFs | SCHD, VYM, DGRO |
+| Income ETFs | SPYI, QQQI, JEPQ, JEPI |
+| Crypto ETFs | IBIT |
 
-```bash
-./ra data --provider yahoo                                  # download, cache and validate the ETFs
-./ra run --profile examples/client_target.json --provider yahoo --as-of today
-./ra run --profile examples/client_target.json --provider yahoo --risk-free fred   # Treasury rate
+Clients choose from this menu category by category; nothing is included unless chosen.
+
+TQQQ (leveraged), the four income ETFs (option strategies) and IBIT (bitcoin) are marked
+**special risk**. When one of them is held, the report explains its specific risks.
+
+ETFs younger than 20 years use all the history they have and are flagged. SGOV, SPYI, JEPQ,
+JEPI, QQQI and IBIT have only 2–6 years, so treat their estimates with caution.
+
+The menu is defined in `robo_advisor/config/default.yaml`, and each fund's facts are in
+`robo_advisor/universe.py`.
+
+---
+
+## Step-by-step: from nothing to a client report
+
+Commands are shown for both systems:
+
+- **Mac/Linux** use the **Terminal** app and write `./ra`.
+- **Windows** uses **PowerShell** and writes `.\ra`, with `\` in file paths.
+
+Type each command and press Enter.
+
+### Step 1: Install Python and Git (once)
+1. **Python 3.10 or newer:** https://www.python.org/downloads/
+   - **Windows:** on the installer's first screen, tick **"Add python.exe to PATH"**.
+2. **Git:** https://git-scm.com/downloads (the default options are fine).
+3. Close and reopen the terminal.
+
+### Step 2: Download the project (once)
+```
+cd Documents
+git clone https://github.com/georgeztian/robo-advisor.git
+cd robo-advisor
+```
+If you don't use Git: on the GitHub page, choose **Code → Download ZIP**, unzip it, and `cd`
+into the unzipped folder.
+
+### Step 3: First run (installation is automatic)
+| Mac / Linux | Windows |
+|---|---|
+| `./ra run --profile examples/client_target.json` | `.\ra run --profile examples\client_target.json` |
+
+You never install anything by hand and never "activate" anything. Every `ra` command first
+checks the app's private Python environment (the `.venv` folder):
+
+- **Missing** (first run): it creates the environment and installs the app and its libraries,
+  which takes a few minutes, once.
+- **Damaged, or outdated** (the dependency list changed, e.g. after `git pull`): it
+  reinstalls or updates it.
+- **Up to date:** it starts right away.
+
+This first run uses **simulated** prices, and the report is marked SYNTHETIC. It only shows
+that everything works. Open the report:
+
+| Mac | Windows |
+|---|---|
+| `open out/alex_target_report.html` | `start out\alex_target_report.html` |
+
+### Step 4: Download and check real market data
+```
+./ra data --provider yahoo
+```
+This downloads about 20 years of daily prices for all 25 ETFs, plus VOO (the S&P 500
+benchmark) and BIL (the T-bill risk-free proxy). It then validates them and prints a table
+ending in `Data OK.`
+
+The prices are cached in `.cache/prices/`, so later runs are fast and work offline. Re-run
+this command whenever you want to check the data.
+
+### Step 5: Enter a client's answers: choose **one** of the two routes
+
+#### Route A: Answer the questions on the command line (easiest)
+```
+./ra run --interactive --provider yahoo --out clients/jane
+```
+The app asks, in order:
+
+1. The client's name, and whether there is a **target** amount by a specific date. If yes, it
+   asks for the target amount and date (YYYY-MM-DD); if no, for the horizon in years.
+2. The initial investment and monthly contribution in dollars.
+3. **9 risk-capacity questions** and **7 risk-tolerance questions**. Type the number of the
+   answer. The investment-horizon question is answered automatically from the goal.
+4. **ETFs, category by category.** For each of the 9 categories, type the numbers of the ETFs
+   to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
+5. Whether short sales are allowed, the maximum position size, and whether to include taxes
+   (and if so, the tax rates).
+6. For a client without a target, the optimization method (the default is fine).
+
+Results go to the folder given by `--out` (use one folder per client):
+
+| File | Contents |
+|---|---|
+| `jane_doe_report.html` | The recommendation report |
+| `jane_doe_profile.json` | The client's answers, saved so you can edit and re-run them (Route B, step B4) |
+| `jane_doe_audit.json` | The full audit trail; needed for later check-ins (Step 8) |
+
+#### Route B: Fill out a profile file
+**B1. Copy a template:**
+
+| Client has... | Mac / Linux | Windows |
+|---|---|---|
+| a target amount by a date | `cp examples/client_target.json clients/john.json` | `copy examples\client_target.json clients\john.json` |
+| no specific target | `cp examples/client_no_target.json clients/john.json` | `copy examples\client_no_target.json clients\john.json` |
+
+Create the `clients` folder first if it doesn't exist (`mkdir clients`).
+
+**B2. Look up the allowed answers and ETF names:**
+```
+./ra questionnaire      # every risk question, its answer codes and weights
+./ra etfs               # the ETF menu by category
 ```
 
-To make Yahoo the default, set `data.provider: yahoo` (and optionally `risk_free_source: fred`)
-in a YAML file and pass it with `--config`.
+**B3. Edit the file** in a plain-text editor (Notepad, TextEdit in plain-text mode, VS Code):
 
-How Yahoo data is handled (`robo_advisor/data/providers.py`):
-- **Download.** It fetches full daily history with unadjusted close, adjusted close,
-  dividends, splits and fund capital-gain distributions. yfinance's price repair is switched
-  on, which fixes 100× errors and bad dividend adjustments.
-- **Normalization.** Split-adjusted prices and dividends are converted back to raw values,
-  so the validator can check them against the adjusted series. A dividend Yahoo reports on a
-  non-trading day moves to the next trading day. Duplicate rows are dropped, and timezones are
-  removed.
-- **Retries.** Rate limits and network errors are retried with exponential backoff.
-- **Cache.** Each ticker is cached in `.cache/prices/<TICKER>.csv`, so repeat runs work
-  offline. A cache that ends before the requested date is refreshed, at most once every
-  12 hours. Delete the folder to force a full re-download.
-- **Validation.** Validation follows the NYSE trading calendar. An isolated bad day in
-  Yahoo's adjusted prices is reported as a warning. A missed split adjustment, or errors on
-  many days, blocks the run.
-- **Risk-free rate.** With `--risk-free fred`, the risk-free rate is the FRED 3-month T-bill
-  rate (series `DTB3`). If FRED can't be reached, it falls back to the BIL T-bill ETF.
+| Field | What to enter |
+|---|---|
+| `profile.name` | Client name (also used for the output file names) |
+| `goal.has_target` | `true` for a target amount by a date, `false` otherwise |
+| `goal.target_amount`, `goal.target_date` | Only if `has_target` is `true`, e.g. `500000` and `"2036-12-31"` |
+| `goal.horizon_years` | Only if `has_target` is `false`, e.g. `15` |
+| `goal.initial_investment`, `goal.monthly_contribution` | Dollar amounts (numbers without `$` or commas) |
+| `capacity_answers` | One answer code for each of the 9 capacity questions (from `./ra questionnaire`) |
+| `tolerance_answers` | One answer code for each of the 7 tolerance questions |
+| `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
+| `constraints` | `allow_short` (`true`/`false`), optional `max_position` (e.g. `0.3`), and `max_gross_leverage` when shorting |
+| `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`) |
+| `preferences` (optional) | `optimization_method` (`mean_variance`, `min_volatility`, `max_sharpe`, `cvar`, `target_return` together with `target_return`, `risk_parity`, `max_diversification`), `target_probability` (e.g. `0.9`), `rebalancing_type` (`calendar` / `threshold`), `rebalancing_frequency` (`monthly` / `quarterly` / `annual`), `rebalancing_threshold` |
 
-`tests/test_yahoo_provider.py` checks this whole path offline. It feeds the real provider code
-a fake yfinance that reproduces Yahoo's format and quirks (see `tests/fake_yfinance.py`), then
-runs the full workflow, reviewer included.
+**B4. Run it:**
+```
+./ra run --profile clients/john.json --provider yahoo --as-of today --out clients/john
+```
+`--as-of today` analyses with data up to today. You can give a past date instead, e.g.
+`--as-of 2026-06-30`.
 
-If `./ra data` reports `MARKET DATA UNAVAILABLE`, Yahoo was not reachable from your
-machine: check your connection or proxy and retry. Any tickers already cached are reused.
+The profile saved by Route A (`clients/jane/jane_doe_profile.json`) works the same way:
+edit it and re-run with `--profile`.
+
+### Step 6: Read the report
+Open `…_report.html` in the client's folder (see Step 3 for how). From top to bottom:
+
+- **Key figures:** the probability of reaching the target, the median projected value,
+  expected return and volatility.
+- **Risk profile:** the capacity, tolerance and mapped scores, and the questionnaire scoring.
+- **Recommended portfolio:** each ETF's category, weight, initial and monthly dollars, and why
+  it was chosen; the allocation by category; ETFs considered but not held.
+- **Financial projection:** the Monte Carlo range, the terminal-value distribution against the
+  target, and the scenarios.
+- **S&P 500 comparison:** the last 10 years with the same money invested.
+- **How it was made:** methodology, assumptions, limitations, and disclosures (including the
+  special-risk ETF notes).
+- **Independent review:** every rule the reviewer checked, and the agent workflow trace.
+
+Optional run flags:
+- `--risk-free fred` uses the official 3-month T-bill rate for the risk-free rate.
+- `--timeline` prints each agent's execution time.
+
+### Step 7: Adjust and re-run
+Change the profile (amounts, answers, ETF choice, constraints) and repeat the Step 5 **B4**
+command. Each run overwrites that client's report and audit.
+
+### Step 8: Periodic check-in (e.g. quarterly)
+1. Copy the client's profile and set `goal.initial_investment` to the portfolio's **current
+   value**. Update anything else that changed.
+2. Run:
+   ```
+   ./ra monitor --prior clients/jane/jane_doe_audit.json --profile clients/jane/jane_updated.json --provider yahoo
+   ```
+3. It reports the performance since the last recommendation, and any **review triggers**:
+   goal changed, contribution changed, target at risk, risk limit exceeded, market risk
+   shifted, or risk profile changed. If any fire, re-run Step 5 B4 with the updated profile.
+
+### Step 9: Update the app
+```
+git pull
+```
+The next `ra` command updates the environment automatically if the dependencies changed.
+
+---
+
+## Command reference
+
+| Command | Purpose |
+|---|---|
+| `./ra run --interactive [options]` | Questionnaire on the command line → report, audit, saved profile |
+| `./ra run --profile FILE [options]` | Run from a profile file → report, audit |
+| `./ra data [--tickers T …]` | Download (or read from cache) and validate market data only |
+| `./ra monitor --prior AUDIT [--profile FILE]` | Re-assess an earlier recommendation |
+| `./ra etfs` | Print the ETF menu by category |
+| `./ra questionnaire` | Print the risk questions and allowed answer codes |
+| `./ra graph [--monitoring]` | Print the agent workflow graph (mermaid) |
+| `./ra test` | Run the test suite |
+
+Common options:
+
+| Option | Meaning |
+|---|---|
+| `--provider synthetic\|yahoo\|csv` | Data source. The default is `synthetic` (offline demo data) |
+| `--as-of YYYY-MM-DD\|today` | Analysis date; data after it is never used |
+| `--out FOLDER` | Where the report, audit and profile are written (default `out`) |
+| `--risk-free etf\|fred` | Risk-free rate from the BIL ETF (default) or the FRED 3-month T-bill rate |
+| `--config FILE.yaml` | Override settings (see Configuration) |
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | OK |
+| 1 | Monitoring found review triggers |
+| 2 | Input problem, blocking data issues (`data`), or the reviewer halted the workflow (the message names the rule) |
+| 3 | Market data unavailable |
 
 ## Configuration
 
-All cutoffs, limits and assumptions live in
-[`robo_advisor/config/default.yaml`](robo_advisor/config/default.yaml): risk bands,
-questionnaire weights, the target probability p, the leverage limit L, the maximum position,
-Monte Carlo paths, rebalancing, tax rates, scenario shifts, monitoring triggers and reviewer
-tolerances. To override any of them, pass `--config my.yaml`; it is deep-merged over the
-defaults.
+All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/default.yaml):
 
-## Tests
+- the ETF menu and its categories;
+- the questionnaire (questions, answer scores and weights);
+- the risk bands (score → volatility limit);
+- the target probability (80 %), the maximum position (50 %) and the leverage limit;
+- the number of Monte Carlo paths and the rebalancing rule;
+- tax rates and scenario shifts;
+- data-validation limits, monitoring triggers and reviewer tolerances.
 
-```bash
-pytest -q
+Don't edit that file. Put only the settings you want to change in your own file and pass
+`--config` with every command:
+```yaml
+# my.yaml
+data: {provider: yahoo, risk_free_source: fred}
+optimization:
+  max_position: 0.30
+  goal: {target_probability: 0.90}
+```
+```
+./ra run --profile clients/john.json --config my.yaml --as-of today --out clients/john
 ```
 
-The suite covers:
-- unit tests for every module;
-- graph-engine contracts, parallelism, remediation and halting;
-- reviewer tampering tests, where each injected violation must be blocked;
-- a reviewer import-isolation test;
-- end-to-end runs of both example clients plus monitoring and the CLI.
+## Market data
 
-> Model outputs are historical estimates and model assumptions, not guarantees. The tax
-> module is an estimated model, not tax advice. Nothing here is personalized investment advice.
+| Provider | Use |
+|---|---|
+| `synthetic` (default) | Deterministic simulated histories, calibrated to each ETF's real inception date and typical behaviour. For demos and tests; reports are watermarked **SYNTHETIC** |
+| `yahoo` | Real daily prices via `yfinance` |
+| `csv` | Your own files: `data/prices/<TICKER>.csv` with columns `date, close, adj_close[, dividend, split_ratio]` |
+
+How Yahoo data is handled:
+
+- **Download.** Full history of unadjusted and adjusted prices, dividends, splits and fund
+  capital-gain distributions. yfinance's price repair is on; if its libraries are missing,
+  data is downloaded unrepaired and the report notes it.
+- **Normalization.** Timezones are removed, duplicate rows dropped, and dividends dated on
+  non-trading days moved to the next trading day.
+- **Retries.** Temporary errors such as rate limits are retried with backoff.
+- **Cache.** Stored in `.cache/prices/` and refreshed when it falls behind the requested date.
+  Delete the folder to force a full re-download.
+- **Validation.** Follows the NYSE calendar. An isolated bad day in Yahoo's adjusted prices
+  is a warning; a missed split adjustment, or systematic errors, stop the run.
+
+## Project layout
+
+```
+ra, ra.bat                 launcher: runs the app inside .venv, installing/updating it automatically
+setup.sh, setup.bat        the installer that ra calls (can also be run directly; --fresh rebuilds)
+examples/                  profile templates (with and without a target)
+robo_advisor/
+  config/default.yaml      all settings, including the ETF menu and the questionnaire
+  universe.py              ETF facts: inception, fees, tax character, special risks
+  questionnaire.py         risk capacity / tolerance scoring and mapping
+  data/                    market-data providers (synthetic, Yahoo, CSV, FRED) and validation
+  estimation.py, tax.py    return / risk estimation and the estimated tax model
+  optimization/            constraints, 7 optimization methods, target-probability goal search
+  simulation.py, projection.py, benchmark.py, rebalancing.py, monitoring.py
+  explain.py, report/      explanations and the HTML report
+  graph/engine.py          workflow-graph engine (parallel waves, review gates, provenance)
+  agents/                  the agents and the advisory / monitoring graphs
+  review/                  the independent reviewer (its own code, no production imports)
+  cli.py                   the commands above
+tests/                     automated tests (./ra test)
+tools/extract_docx.py      extracts the .docx specification, including Word equations
+docs/                      SPEC.md (the extracted specification), ARCHITECTURE.md
+```
+
+Client folders (`clients/`), outputs (`out/`), the data cache and `.venv` are ignored by Git.
+Client files contain personal financial data, so keep them out of the repository.
+
+## Troubleshooting
+
+| Message | What to do |
+|---|---|
+| `Python 3.10 or newer was not found` | Install Python (Step 1). On Windows, reinstall with "Add python.exe to PATH" ticked, then open a new terminal |
+| `permission denied: ./ra` (Mac/Linux) | Run `chmod +x ra setup.sh` once |
+| `INPUT PROBLEM: …` | The profile or answers are invalid. The message says which field. For `universe`, it lists the categories and ETFs |
+| `MARKET DATA UNAVAILABLE` | Yahoo couldn't be reached. Check your internet, VPN or firewall, wait a minute (rate limit) and retry |
+| `WORKFLOW HALTED at review_…` | The reviewer found a real problem. The message names the rule. A common one is that no mix of the chosen ETFs meets the client's risk limit; add lower-risk ETFs such as Bond or Risk-free Treasury ETFs |
+| The environment seems broken | `./setup.sh --fresh` (Windows: `.\setup.bat --fresh`) |
+| Odd data warnings | Delete `.cache` and re-run `./ra data --provider yahoo` |
+
+## Limitations
+
+- **Estimates, not forecasts.** Expected returns and risks come from history. Mean-variance
+  optimization can concentrate in ETFs with short, strong histories (for example IBIT), and
+  allocations are capped per ETF (`max_position`), not per category.
+- **Estimated taxes.** The tax model is an estimate for a taxable account, not tax advice.
+- **Model assumptions.** Monte Carlo returns are log-normal (or bootstrapped), which
+  understates extreme events.
+- **Your review.** A qualified professional should review the questionnaire scoring, the risk
+  bands and the disclosures before the tool is used with real clients.

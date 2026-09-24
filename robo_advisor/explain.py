@@ -9,14 +9,13 @@ from .models import (BenchmarkResult, DataQualityReport, Estimates, Explanation,
                      Request, RiskAssessment, ScenarioResult, SimulationResult, TaxContext)
 from .optimization.methods import METHOD_LABELS
 from .rebalancing import describe as describe_rebalancing
-from .universe import CATALOG
+from .universe import CATALOG, RISK_NOTE_PREFIX, category_of
 
 DISCLOSURE_ESTIMATES = ("Expected returns, volatilities and correlations are historical estimates / "
                         "model assumptions. They are not guaranteed future returns.")
 DISCLOSURE_SCENARIOS = ("Scenarios are illustrative what-if assumptions, not forecasts.")
 DISCLOSURE_SYNTHETIC = ("SYNTHETIC DATA: this report was generated from simulated price histories for "
                         "demonstration and testing. The figures do not describe real ETF performance.")
-DISCLOSURE_LEVERAGED_PREFIX = "LEVERAGED ETF:"
 DISCLOSURE_NOT_ADVICE = ("This is an automated, model-based illustration and not personalized "
                          "investment, legal or tax advice.")
 
@@ -72,9 +71,11 @@ def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port:
 def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext, port: Portfolio,
             sim: SimulationResult, proj: Projection, bench: BenchmarkResult,
             scenarios: list[ScenarioResult], dq: DataQualityReport, synthetic: bool,
-            inflation: float, lookback_years: int = 20) -> Explanation:
+            inflation: float, lookback_years: int = 20,
+            categories: dict[str, list[str]] | None = None) -> Explanation:
     w = port.weights
     mu = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
+    categories = categories or {}
     rc = risk_contributions(w, est.cov)
     port_cov = est.cov @ w
     sp = np.sqrt(w @ est.cov @ w)
@@ -82,7 +83,8 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     rows = []
     for i, t in enumerate(est.tickers):
         rows.append({
-            "ETF": t, "Name": CATALOG[t].name, "Asset class": CATALOG[t].asset_class,
+            "ETF": t, "Name": CATALOG[t].name, "Category": category_of(t, categories),
+            "Asset class": CATALOG[t].asset_class,
             "Weight": w[i], "Initial": port.initial_allocation[t], "Monthly": port.monthly_allocation[t],
             "Est. return": mu[i], "Volatility": est.sigma[i], "Corr. to portfolio": corr_to_port[i],
             "Risk contribution": rc[i], "History (yrs)": est.history_years[t],
@@ -175,14 +177,14 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             f"{t} ({dq.tickers[t].years_available:.1f}y)" for t in short) + ".")
     limitations += [f"Benchmark note: {n}" for n in bench.notes]
     disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS, DISCLOSURE_NOT_ADVICE]
-    lev = [t for t, x in zip(est.tickers, w) if abs(x) > 1e-6 and CATALOG[t].leveraged]
-    for t in lev:
-        cagr = float(est.stats.loc[t, "cagr"])
-        disclosures.append(
-            f"{DISCLOSURE_LEVERAGED_PREFIX} {t} resets its leverage daily; over long horizons its compound "
-            f"return can differ sharply from the leveraged index return (volatility decay). Its arithmetic "
-            f"mean return estimate ({est.mu[est.tickers.index(t)]:.1%}) exceeds its historical compound growth "
-            f"({cagr:.1%}), which mean-variance optimization does not penalize.")
+    for t, x in zip(est.tickers, w):
+        note = CATALOG[t].risk_note
+        if note and abs(x) > 1e-6:
+            i = est.tickers.index(t)
+            disclosures.append(
+                f"{RISK_NOTE_PREFIX} {t} ({CATALOG[t].name}) {note}. Historical estimate over "
+                f"{est.history_years[t]:.1f} years: arithmetic mean return {est.mu[i]:.1%}, compound growth "
+                f"{float(est.stats.loc[t, 'cagr']):.1%}, volatility {est.sigma[i]:.1%}.")
     if tax.disclaimer:
         disclosures.append(tax.disclaimer)
     if synthetic:

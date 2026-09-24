@@ -84,9 +84,17 @@ questionnaire:
       weight: 0.10
       options: {preserve: 5, mostly_preserve: 30, balance: 60, mostly_growth: 85, growth: 100}
 
-universe:
-  default: [VOO, VTI, BND, TLT, BIL, GLD, QQQ, TQQQ, VXUS, VT, VWO, VNQ, SCHH, SCHD, VYM, DGRO]
-  optional_extra: [SGOV]      # appears in the spec §10 example but not in the §3 list
+universe:                     # the ETFs a client may choose from, by category (25 ETFs, 9 categories)
+  categories:
+    Equity ETFs: [SPY, VOO, VTI, QQQ, TQQQ]
+    Bond ETFs: [BND, TLT, HYG]
+    Risk-free Short-term Treasury ETFs: [BIL, SGOV]
+    Commodity ETFs: [GLD, SLV]
+    International Equity ETFs: [VXUS, IEFA, VWO]
+    Real Estate ETFs: [VNQ, SCHH]
+    Dividend ETFs: [SCHD, VYM, DGRO]
+    Income ETFs: [SPYI, QQQI, JEPQ, JEPI]
+    Crypto ETFs: [IBIT]
 
 data:
   provider: synthetic         # synthetic | csv | yahoo

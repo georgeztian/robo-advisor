@@ -105,13 +105,22 @@ _ETF_SPEC: dict[str, tuple[dict[str, float], float, float, int]] = {
     "GLD": ({"GOLD": 1.0}, 0.010, 0.000, 0),
     "QQQ": ({"GROWTH": 1.0}, 0.010, 0.007, 4),
     "VXUS": ({"INTL": 0.78, "EM": 0.22}, 0.012, 0.030, 4),
-    "VT": ({"US": 0.60, "INTL": 0.30, "EM": 0.10}, 0.008, 0.021, 4),
     "VWO": ({"EM": 1.0}, 0.015, 0.032, 4),
     "VNQ": ({"REIT": 1.0}, 0.012, 0.038, 4),
     "SCHH": ({"REIT": 1.0}, 0.015, 0.030, 4),
     "SCHD": ({"VALUE": 1.0}, 0.030, 0.033, 4),
     "VYM": ({"VALUE": 1.0}, 0.025, 0.030, 4),
     "DGRO": ({"VALUE": 0.6, "US": 0.4}, 0.025, 0.023, 4),
+    "SPY": ({"US": 1.0}, 0.004, 0.014, 4),
+    "HYG": ({"AGG": 0.55, "US": 0.30}, 0.030, 0.055, 12),        # credit: part rates, part equity risk
+    "SLV": ({"GOLD": 1.25}, 0.170, 0.000, 0),                    # silver: gold beta plus its own noise
+    "IEFA": ({"INTL": 1.0}, 0.010, 0.029, 4),
+    # option-income: equity beta below 1 (calls sold), high monthly distributions
+    "SPYI": ({"US": 0.80}, 0.020, 0.120, 12),
+    "QQQI": ({"GROWTH": 0.80}, 0.025, 0.135, 12),
+    "JEPQ": ({"GROWTH": 0.75}, 0.025, 0.100, 12),
+    "JEPI": ({"VALUE": 0.65}, 0.020, 0.080, 12),
+    "IBIT": ({"GROWTH": 1.50}, 0.450, 0.000, 0),                 # bitcoin: very high idiosyncratic risk
 }
 
 
