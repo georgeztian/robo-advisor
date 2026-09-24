@@ -219,6 +219,7 @@ def cmd_data(args) -> int:
         print(f"MARKET DATA UNAVAILABLE: {e}", file=sys.stderr)
         return 3
     dq = validate(frames, start, as_of, s.data)
+    dq.warnings.extend(getattr(prov, "notes", []))
     print(f"\n{'ETF':<6}{'first':>12}{'last':>12}{'years':>7}{'missing':>9}{'splits':>8}{'dists':>7}"
           f"{'adj err':>10}  status")
     for t, q in dq.tickers.items():

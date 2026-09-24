@@ -23,6 +23,7 @@ from robo_advisor.data.providers import SyntheticProvider
 _SYN = SyntheticProvider(inject_gaps=False)
 CALLS: dict[str, int] = {}
 SPLIT_UNADJUSTED: set[str] = set()      # tickers served with a missed split adjustment
+REPAIR_LIBS_MISSING = False              # simulate yfinance[repair] extras not installed
 
 
 class YFRateLimitError(Exception):
@@ -77,6 +78,8 @@ class Ticker:
                 raise_errors=False, **kw) -> pd.DataFrame:
         assert period == "max" and interval == "1d" and auto_adjust is False and actions is True
         CALLS[self.symbol] = CALLS.get(self.symbol, 0) + 1
+        if repair and REPAIR_LIBS_MISSING:     # what yfinance does without scikit-learn
+            raise ModuleNotFoundError("No module named 'sklearn'", name="sklearn")
         if self.symbol == "QQQ" and CALLS[self.symbol] == 1:
             raise YFRateLimitError("Too Many Requests. Rate limited. Try after a while.")
         return yahoo_frame(self.symbol)

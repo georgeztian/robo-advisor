@@ -23,6 +23,7 @@ def yahoo(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "yfinance", fake_yfinance)
     fake_yfinance.CALLS.clear()
     fake_yfinance.SPLIT_UNADJUSTED.clear()
+    fake_yfinance.REPAIR_LIBS_MISSING = False
     return YahooProvider(tmp_path / "cache", backoff=0.0)
 
 
@@ -116,3 +117,30 @@ def test_fred_treasury_rate_parsing_and_cache(tmp_path):
 
     with pytest.raises(DataUnavailableError):
         fetch_treasury_rate("DTB3", dt.date(2020, 1, 1), dt.date(2024, 1, 5), None, fail)
+
+
+def test_missing_repair_libraries_fall_back_to_unrepaired_download(yahoo, settings):
+    """Real-world failure: yfinance's repair imports scikit-learn, which is optional."""
+    fake_yfinance.REPAIR_LIBS_MISSING = True
+    frames = yahoo.fetch(["BND", "VOO"], WS, AS_OF)
+    assert fake_yfinance.CALLS == {"BND": 2, "VOO": 1}           # one immediate fallback, no retry storm
+    assert yahoo.repair is False and "sklearn" in yahoo.notes[0]
+    assert not validate(frames, WS, AS_OF, settings.data).blocking
+
+
+def test_non_transient_errors_are_not_retried(monkeypatch, tmp_path):
+    class Bad:
+        calls = 0
+
+        class Ticker:
+            def __init__(self, s):
+                pass
+
+            def history(self, **kw):
+                Bad.calls += 1
+                raise KeyError("Adj Close")
+
+    monkeypatch.setitem(sys.modules, "yfinance", Bad)
+    with pytest.raises(DataUnavailableError, match="unexpected Yahoo data"):
+        YahooProvider(tmp_path, retries=4, backoff=0.0).fetch(["VOO"], WS, AS_OF)
+    assert Bad.calls == 1
