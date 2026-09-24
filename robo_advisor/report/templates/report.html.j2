@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robo-Advisor Report</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f6f5f2; --surface-1: #fcfcfb; --border: #e3e1dc; --track: #eeede9;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-8: #e34948;
+  --seq-150: #b7d3f6; --seq-250: #86b6ef; --seq-550: #1c5cab;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-text: #006300;
+  --banner: #fff4d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --track: #2a2a27;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-8: #e66767;
+    --seq-150: #104281; --seq-250: #184f95; --seq-550: #6da7ec; --good-text: #4cc94c; --banner: #3a3117;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --track: #2a2a27;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-8: #e66767;
+  --seq-150: #104281; --seq-250: #184f95; --seq-550: #6da7ec; --good-text: #4cc94c; --banner: #3a3117;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+       font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 0 0 12px; } h3 { font-size: 15px; margin: 16px 0 8px; }
+.sub { color: var(--text-secondary); margin: 0; }
+section { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 16px; }
+.banner { background: var(--banner); border: 1px solid var(--warning); border-radius: 10px; padding: 10px 14px; margin-top: 16px; font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.tile .k { color: var(--text-secondary); font-size: 13px; }
+.tile .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile.hero { grid-column: span 2; } .tile.hero .v { font-size: 40px; }
+.tile .n { color: var(--text-muted); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; } td.num, th.num { text-align: right; white-space: nowrap; }
+tr.total td { font-weight: 650; }
+.scroll { overflow-x: auto; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .tick { fill: var(--text-muted); font-size: 11px; }
+.chart .label { fill: var(--text-secondary); font-size: 12px; }
+.chart .value { fill: var(--text-primary); font-size: 12px; }
+.chart .refline { stroke: var(--text-primary); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .reflabel { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+.chart .hit { fill: transparent; } .chart .hit:hover { fill: var(--text-primary); fill-opacity: .05; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-secondary); font-size: 13px; margin: 4px 0 8px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.status { font-weight: 650; } .pass { color: var(--good-text); } .fail { color: var(--critical); } .warn { color: var(--text-primary); }
+ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
+details summary { cursor: pointer; color: var(--text-secondary); margin-top: 8px; }
+pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) { .two { grid-template-columns: 1fr; } .tile.hero { grid-column: span 1; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Your Robo-Advisor Recommendation</h1>
+  <p class="sub">{{ client_name }} · as of {{ as_of }} · data source: {{ data_source }}</p>
+  <p class="sub">{{ exp.headline }}</p>
+</header>
+{% if synthetic %}<div class="banner">⚠ SYNTHETIC DATA: every figure below comes from simulated price histories generated for demonstration and testing. It does not describe real ETF performance.</div>{% endif %}
+<div class="banner" style="background:transparent;border-color:var(--border);font-weight:500">
+  <span class="status {{ 'pass' if review_ok else 'fail' }}">{{ '✔ Independent review passed' if review_ok else '✖ Independent review found blocking issues' }}</span>
+  · {{ review_summary }}
+</div>
+
+<section>
+  <h2>Key figures</h2>
+  <div class="tiles">
+    {% if has_target %}
+    <div class="tile hero"><div class="k">Probability of reaching {{ money(target) }} by {{ target_date }}</div>
+      <div class="v">{{ "%.0f%%"|format(sim.prob_target*100) }}</div>
+      <div class="n">share of {{ "{:,}".format(sim.n_paths) }} simulated paths (required ≥ {{ "%.0f%%"|format(target_probability*100) }})</div></div>
+    {% endif %}
+    <div class="tile"><div class="k">Median projected value</div><div class="v">{{ money(sim.percentiles[50]) }}</div><div class="n">in {{ months }} months · {{ money(sim.total_contributed) }} contributed</div></div>
+    <div class="tile"><div class="k">Est. annual return{{ ' (after tax)' if taxes else '' }}</div><div class="v">{{ "%.1f%%"|format(port.expected_return*100) }}</div><div class="n">historical estimate</div></div>
+    <div class="tile"><div class="k">Est. volatility</div><div class="v">{{ "%.1f%%"|format(port.volatility*100) }}</div><div class="n">limit {{ "%.0f%%"|format(risk.max_volatility*100) }} ({{ risk.profile }})</div></div>
+    <div class="tile"><div class="k">Probability of losing principal</div><div class="v">{{ "%.1f%%"|format(sim.prob_loss_principal*100) }}</div><div class="n">terminal value below total contributions</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Risk profile</h2>
+  <p>{{ exp.risk_text }}</p>
+  {{ risk_chart|safe }}
+  <details><summary>Questionnaire scoring (capacity and tolerance, measured separately)</summary>
+    <div class="two">
+      {% for title, detail in [("Risk capacity", risk.capacity_detail), ("Risk tolerance", risk.tolerance_detail)] %}
+      <div class="scroll"><h3>{{ title }}</h3><table><tr><th>Question</th><th>Answer</th><th class="num">Score</th><th class="num">Weight</th><th class="num">Points</th></tr>
+      {% for qid, d in detail.items() %}<tr><td>{{ d.question }}</td><td>{{ d.answer }}{{ ' (derived from goal)' if d.derived else '' }}</td><td class="num">{{ "%.0f"|format(d.score) }}</td><td class="num">{{ "%.2f"|format(d.weight) }}</td><td class="num">{{ "%.1f"|format(d.contribution) }}</td></tr>{% endfor %}
+      </table></div>
+      {% endfor %}
+    </div>
+    <p class="sub">Mapped risk score = min(capacity, tolerance). Risk bands (configurable):
+      {% for b in bands %}{{ b.profile }} ≤ {{ b.max_score|int }} → σ ≤ {{ "%.0f%%"|format(b.max_volatility*100) }}{{ '; ' if not loop.last }}{% endfor %}</p>
+  </details>
+</section>
+
+<section>
+  <h2>Recommended portfolio</h2>
+  <p>{{ exp.goal_text }}</p>
+  <p class="sub">{{ exp.portfolio_text }} Method: {{ method_label }}.</p>
+  {% for n in port.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
+  {{ alloc_chart|safe }}
+  <div class="scroll"><table>
+    <tr><th>ETF</th><th>Asset class</th><th class="num">Weight</th><th class="num">Initial</th><th class="num">Monthly</th><th class="num">Est. return</th><th class="num">Volatility</th><th class="num">Risk contrib.</th><th>Why</th></tr>
+    {% for t, r in held_rows %}<tr><td><b>{{ t }}</b></td><td>{{ r["Asset class"] }}</td><td class="num">{{ "%.1f%%"|format(r.Weight*100) }}</td><td class="num">{{ money(r.Initial) }}</td><td class="num">{{ money(r.Monthly) }}</td><td class="num">{{ "%.1f%%"|format(r["Est. return"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r.Volatility*100) }}</td><td class="num">{{ "%.0f%%"|format(r["Risk contribution"]*100) }}</td><td>{{ r.Rationale }}</td></tr>{% endfor %}
+    <tr class="total"><td>Total</td><td></td><td class="num">{{ "%.1f%%"|format(weight_total*100) }}</td><td class="num">{{ money(W0) }}</td><td class="num">{{ money(C) }}</td><td class="num">{{ "%.1f%%"|format(port.expected_return*100) }}</td><td class="num">{{ "%.1f%%"|format(port.volatility*100) }}</td><td class="num">100%</td><td></td></tr>
+  </table></div>
+  {% if unheld_rows %}<details><summary>ETFs considered but not held ({{ unheld_rows|length }})</summary><div class="scroll"><table>
+    <tr><th>ETF</th><th class="num">Est. return</th><th class="num">Volatility</th><th class="num">History</th><th>Why not</th></tr>
+    {% for t, r in unheld_rows %}<tr><td>{{ t }}</td><td class="num">{{ "%.1f%%"|format(r["Est. return"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r.Volatility*100) }}</td><td class="num">{{ "%.1f"|format(r["History (yrs)"]) }}y</td><td>{{ r.Rationale }}</td></tr>{% endfor %}
+  </table></div></details>{% endif %}
+  <h3>Historical downside risk of this allocation</h3>
+  <p class="sub">Since {{ prisk.common_start }} (common history of held ETFs): max drawdown {{ "%.1f%%"|format(prisk.max_drawdown*100) }},
+    daily 95% VaR {{ "%.2f%%"|format(prisk.var_daily*100) }}, daily 95% CVaR {{ "%.2f%%"|format(prisk.cvar_daily*100) }},
+    downside deviation {{ "%.1f%%"|format(prisk.downside_dev*100) }}.</p>
+</section>
+
+<section>
+  <h2>Financial projection</h2>
+  <div class="legend"><span><i class="sw" style="background:var(--seq-150)"></i>10th–90th percentile</span><span><i class="sw" style="background:var(--seq-250)"></i>25th–75th percentile</span><span><i class="sw" style="background:var(--seq-550)"></i>Median</span><span><i class="sw" style="background:var(--text-muted)"></i>Total contributed</span></div>
+  {{ fan_chart|safe }}
+  <div class="scroll"><table>
+    <tr><th>Percentile</th>{% for p, v in sim.percentiles.items() %}<th class="num">{{ p }}th</th>{% endfor %}<th class="num">Mean</th></tr>
+    <tr><td>Terminal value</td>{% for p, v in sim.percentiles.items() %}<td class="num">{{ money(v) }}</td>{% endfor %}<td class="num">{{ money(sim.expected_terminal) }}</td></tr>
+  </table></div>
+  <p class="sub">Median maximum drawdown along a path: {{ "%.1f%%"|format(sim.max_drawdown_median*100) }} (1-in-20 worst: {{ "%.1f%%"|format(sim.max_drawdown_p95*100) }}).
+  {% if taxes %}Median estimated taxes paid over the horizon: {{ money(sim.taxes_paid_median) }}.{% endif %}
+  Deterministic projection FV = W0(1+r)<sup>T</sup> + C[((1+r)<sup>T</sup>−1)/r] with r = {{ "%.3f%%"|format(proj.monthly_rate*100) }}/month, T = {{ proj.months }}: {{ money(proj.fv_nominal) }} nominal, {{ money(proj.fv_real) }} in today's dollars.</p>
+  {% if has_target %}
+  <h3>Target progress: simulated terminal values vs. the target</h3>
+  {{ hist_chart|safe }}
+  {% endif %}
+  <h3>Scenario analysis (not forecasts)</h3>
+  <div class="scroll"><table><tr><th>Scenario</th><th class="num">Return shift</th><th class="num">Volatility ×</th><th class="num">10th pct</th><th class="num">Median</th><th class="num">90th pct</th>{% if has_target %}<th class="num">P(target)</th>{% endif %}<th class="num">P(loss)</th></tr>
+  {% for s in scenarios %}<tr><td>{{ s.name|capitalize }}</td><td class="num">{{ "%+.1f%%"|format(s.mu_shift*100) }}</td><td class="num">{{ "%.2f"|format(s.vol_multiplier) }}</td><td class="num">{{ money(s.p10) }}</td><td class="num">{{ money(s.median) }}</td><td class="num">{{ money(s.p90) }}</td>{% if has_target %}<td class="num">{{ "%.0f%%"|format(s.prob_target*100) }}</td>{% endif %}<td class="num">{{ "%.1f%%"|format(s.prob_loss_principal*100) }}</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>S&amp;P 500 comparison ({{ bench.start }} to {{ bench.end }})</h2>
+  <p>If you had invested {{ money(W0) }} initially and contributed {{ money(C) }} per month, the recommended portfolio would have grown to
+    <b>{{ money(bench.metrics.loc["Ending wealth (with monthly contributions)", "Portfolio"]) }}</b> versus
+    <b>{{ money(bench.metrics.loc["Ending wealth (with monthly contributions)", "S&P 500"]) }}</b> for the S&amp;P 500
+    ({{ money(bench.metrics.loc["Total contributed", "Portfolio"]) }} contributed).</p>
+  {% for n in bench.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
+  <div class="legend"><span><i class="sw" style="background:var(--series-1)"></i>Recommended portfolio</span><span><i class="sw" style="background:var(--series-2)"></i>S&amp;P 500 (VOO)</span></div>
+  <h3>Growth of $10,000</h3>
+  {{ growth_chart|safe }}
+  <h3>Wealth with the same initial investment and monthly contributions</h3>
+  {{ contrib_chart|safe }}
+  <div class="scroll"><table><tr><th>Metric</th><th class="num">Portfolio</th><th class="num">S&amp;P 500</th></tr>
+  {% for k, row in bench_rows %}<tr><td>{{ k }}</td><td class="num">{{ row[0] }}</td><td class="num">{{ row[1] }}</td></tr>{% endfor %}
+  </table></div>
+  <details><summary>Calendar-year returns</summary><div class="scroll"><table><tr><th>Year</th><th class="num">Portfolio</th><th class="num">S&amp;P 500</th></tr>
+  {% for y, r in bench.calendar_year_returns.iterrows() %}<tr><td>{{ y }}</td><td class="num">{{ "%.1f%%"|format(r["Portfolio"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r["S&P 500"]*100) }}</td></tr>{% endfor %}
+  </table></div></details>
+</section>
+
+<section>
+  <h2>How this recommendation was made</h2>
+  <h3>Methodology</h3><ul>{% for m in exp.methodology %}<li>{{ m }}</li>{% endfor %}</ul>
+  <h3>Assumptions</h3><ul>{% for m in exp.assumptions %}<li>{{ m }}</li>{% endfor %}</ul>
+  <h3>Limitations</h3><ul>{% for m in exp.limitations %}<li>{{ m }}</li>{% endfor %}</ul>
+  <h3>Disclosures</h3><ul>{% for m in exp.disclosures %}<li>{{ m }}</li>{% endfor %}</ul>
+  <details><summary>Underlying calculations</summary><pre>{{ calculations }}</pre></details>
+  <details><summary>Parameter estimates for all selected ETFs (historical)</summary><div class="scroll"><table>
+    <tr><th>ETF</th><th class="num">Years</th><th class="num">Exp. return</th><th class="num">CAGR</th><th class="num">Vol</th><th class="num">Downside dev</th><th class="num">Max DD</th><th class="num">VaR 95% (d)</th><th class="num">CVaR 95% (d)</th><th class="num">Beta</th><th class="num">Sharpe</th><th class="num">Sortino</th><th class="num">Yield</th></tr>
+    {% for t, r in stats_rows %}<tr><td>{{ t }}</td><td class="num">{{ "%.1f"|format(r.years) }}</td><td class="num">{{ "%.1f%%"|format(r.exp_return*100) }}</td><td class="num">{{ "%.1f%%"|format(r.cagr*100) }}</td><td class="num">{{ "%.1f%%"|format(r.volatility*100) }}</td><td class="num">{{ "%.1f%%"|format(r.downside_dev*100) }}</td><td class="num">{{ "%.0f%%"|format(r.max_drawdown*100) }}</td><td class="num">{{ "%.2f%%"|format(r.var_daily*100) }}</td><td class="num">{{ "%.2f%%"|format(r.cvar_daily*100) }}</td><td class="num">{{ "%.2f"|format(r.beta) }}</td><td class="num">{{ "%.2f"|format(r.sharpe) }}</td><td class="num">{{ "%.2f"|format(r.sortino) }}</td><td class="num">{{ "%.1f%%"|format(r.income_yield*100) }}</td></tr>{% endfor %}
+  </table></div>
+  <h3>Correlations</h3><div class="scroll"><table><tr><th></th>{% for t in corr_tickers %}<th class="num">{{ t }}</th>{% endfor %}</tr>
+    {% for t, row in corr_rows %}<tr><th>{{ t }}</th>{% for v in row %}<td class="num">{{ "%.2f"|format(v) }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  </details>
+  <details><summary>Data validation ({{ dq_rows|length }} ETFs)</summary><div class="scroll"><table>
+    <tr><th>ETF</th><th>Inception</th><th>First obs.</th><th class="num">Years</th><th>≥20y</th><th class="num">Missing</th><th class="num">Splits</th><th class="num">Distributions</th><th class="num">Adj. check err</th><th class="num">Expense</th><th>Issues</th></tr>
+    {% for q in dq_rows %}<tr><td>{{ q.ticker }}</td><td>{{ q.inception }}</td><td>{{ q.first_obs }}</td><td class="num">{{ "%.1f"|format(q.years_available) }}</td><td>{{ 'yes' if q.meets_min_history else 'no (max available used)' }}</td><td class="num">{{ q.missing_days }}</td><td class="num">{{ q.n_splits }}</td><td class="num">{{ q.n_distributions }}</td><td class="num">{{ "%.1e"|format(q.adj_consistency_max_error) }}</td><td class="num">{{ "%.2f%%"|format((q.expense_ratio or 0)*100) }}</td><td>{{ q.issues|join('; ') }}</td></tr>{% endfor %}
+  </table></div></details>
+</section>
+
+<section>
+  <h2>Independent review</h2>
+  <p class="sub">A separate reviewer agent recomputed key figures with its own code and checked each rule of the specification at three checkpoints.</p>
+  {% for rep in reviews %}
+  <details {{ 'open' if not rep.ok }}><summary>{{ rep.summary() }}</summary><div class="scroll"><table>
+    <tr><th>Rule</th><th>Spec</th><th>Severity</th><th>Status</th><th>Check</th></tr>
+    {% for f in rep.findings %}<tr><td>{{ f.rule_id }}</td><td>{{ f.spec_ref }}</td><td>{{ f.severity }}</td><td class="status {{ 'pass' if f.passed else ('fail' if f.severity == 'BLOCKER' else 'warn') }}">{{ '✔ pass' if f.passed else '✖ fail' }}</td><td>{{ f.message }}</td></tr>{% endfor %}
+  </table></div></details>
+  {% endfor %}
+  <details><summary>Agent workflow trace</summary><div class="scroll"><table>
+    <tr><th>Wave</th><th>Agent</th><th>Kind</th><th>Attempt</th><th>Status</th><th class="num">ms</th><th>Outputs (hash)</th></tr>
+    {% for e in trace %}<tr><td>{{ e.wave }}</td><td>{{ e.node }}</td><td>{{ e.kind }}</td><td>{{ e.attempt }}</td><td>{{ e.status }}</td><td class="num">{{ "%.0f"|format(e.seconds*1000) }}</td><td>{% for k, h in e.outputs.items() %}{{ k }}:{{ h }} {% endfor %}</td></tr>{% endfor %}
+  </table></div><pre>{{ mermaid }}</pre></details>
+</section>
+</main>
+</body>
+</html>

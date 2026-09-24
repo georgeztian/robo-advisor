@@ -1,0 +1,35 @@
+{
+  "profile": {"name": "Alex Target", "age": 38, "investment_experience": "ETFs for 8 years"},
+  "as_of": "2026-09-23",
+  "goal": {
+    "has_target": true,
+    "target_amount": 500000,
+    "target_date": "2036-12-31",
+    "initial_investment": 100000,
+    "monthly_contribution": 2000
+  },
+  "capacity_answers": {
+    "annual_income": "100k_200k",
+    "liquid_assets": "1y_3y",
+    "investable_assets": "25_50pct",
+    "emergency_savings": "6_12m",
+    "debt_obligations": "under_10pct",
+    "income_stability": "stable",
+    "large_expenditures": "possible",
+    "portfolio_dependence": "slightly",
+    "continue_investing": "probably"
+  },
+  "tolerance_answers": {
+    "decline_reaction": "sell_at_40",
+    "temporary_losses": "moderately",
+    "stable_vs_volatile": "balanced",
+    "equity_comfort": "comfortable",
+    "experience": "stocks_etfs",
+    "crash_behavior": "held",
+    "preserve_vs_growth": "balance"
+  },
+  "universe": ["VOO", "VXUS", "BND", "BIL", "GLD", "TLT", "VNQ", "SCHD", "QQQ"],
+  "constraints": {"allow_short": false, "max_position": 0.5},
+  "taxes": {"enabled": false},
+  "preferences": {"rebalancing_type": "calendar", "rebalancing_frequency": "quarterly"}
+}

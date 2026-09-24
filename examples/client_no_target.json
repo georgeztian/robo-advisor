@@ -1,0 +1,36 @@
+{
+  "profile": {"name": "Jordan Growth", "age": 45},
+  "as_of": "2026-09-23",
+  "goal": {
+    "has_target": false,
+    "initial_investment": 250000,
+    "monthly_contribution": 1500,
+    "horizon_years": 15
+  },
+  "capacity_answers": {
+    "annual_income": "200k_500k",
+    "liquid_assets": "3y_10y",
+    "investable_assets": "25_50pct",
+    "emergency_savings": "over_12m",
+    "debt_obligations": "none",
+    "income_stability": "very_stable",
+    "large_expenditures": "unlikely",
+    "portfolio_dependence": "not_at_all",
+    "continue_investing": "definitely"
+  },
+  "tolerance_answers": {
+    "decline_reaction": "hold_through_40",
+    "temporary_losses": "very",
+    "stable_vs_volatile": "mostly_growth",
+    "equity_comfort": "comfortable",
+    "experience": "stocks_etfs",
+    "crash_behavior": "held",
+    "preserve_vs_growth": "mostly_growth"
+  },
+  "universe": null,
+  "constraints": {"allow_short": false},
+  "taxes": {"enabled": true, "ordinary_rate": 0.32, "qualified_dividend_rate": 0.15,
+            "ltcg_rate": 0.15, "stcg_rate": 0.32, "state_rate": 0.05},
+  "preferences": {"optimization_method": "mean_variance", "rebalancing_type": "threshold",
+                  "rebalancing_threshold": 0.05}
+}
