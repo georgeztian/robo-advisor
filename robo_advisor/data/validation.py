@@ -24,6 +24,12 @@ def total_return_from_raw(df: pd.DataFrame) -> pd.Series:
     return (df["close"] + df["dividend"]) * df["split_ratio"] / df["close"].shift(1) - 1
 
 
+def adj_check_blocks(max_err: float, n_bad: int, n_obs: int, cfg: DataCfg) -> bool:
+    """Isolated vendor glitches (a mis-dated dividend, a rounding spike) are tolerated; a missed
+    split adjustment or systematic mismatch blocks."""
+    return max_err > cfg.adj_split_error or n_bad > max(cfg.adj_max_bad_days, cfg.adj_max_bad_fraction * n_obs)
+
+
 def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.date,
              cfg: DataCfg) -> DataQualityReport:
     cal = trading_calendar(window_start, as_of)
@@ -68,10 +74,17 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
                 warnings.append(f"{t}: {len(missing_idx)} missing day(s) forward-filled for alignment")
         adj_ret = df["adj_close"].pct_change()
         raw_ret = total_return_from_raw(df)
-        err = float((adj_ret - raw_ret).abs().max(skipna=True)) if len(df) > 1 else 0.0
-        if err > cfg.adj_consistency_tol:
-            issues.append(f"adjusted close inconsistent with splits/distributions (max err {err:.4f})")
-            blocking.append(f"{t}: adjusted prices inconsistent with splits/distributions (max err {err:.4f})")
+        gap = (adj_ret - raw_ret).abs()
+        err = float(gap.max(skipna=True)) if len(df) > 1 else 0.0
+        n_bad = int((gap > cfg.adj_consistency_tol).sum())
+        if n_bad:
+            msg = (f"adjusted close inconsistent with splits/distributions on {n_bad} day(s) "
+                   f"(max err {err:.4f})")
+            issues.append(msg)
+            if adj_check_blocks(err, n_bad, len(df), cfg):
+                blocking.append(f"{t}: {msg}")
+            else:
+                warnings.append(f"{t}: {msg}; isolated vendor data error(s), tolerated")
         if len(df) < cfg.min_observations:
             issues.append(f"only {len(df)} observations")
             blocking.append(f"{t}: only {len(df)} daily observations up to {as_of}; at least "

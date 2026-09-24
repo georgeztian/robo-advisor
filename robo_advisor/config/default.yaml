@@ -97,10 +97,17 @@ data:
   min_observations: 252       # an ETF needs at least ~1 year of daily data (below -> BLOCKER)
   max_missing_fraction: 0.02  # of expected trading days, per ETF (above -> BLOCKER)
   max_ffill_days: 3           # short gaps forward-filled for alignment (and flagged)
-  adj_consistency_tol: 0.002  # max daily abs gap between adj-close return and close+div+split return
+  adj_consistency_tol: 0.002  # daily abs gap between adj-close return and close+div+split return
+  adj_split_error: 0.25       # a gap this large means a missed split adjustment (-> BLOCKER)
+  adj_max_bad_days: 3         # more inconsistent days than max(this, fraction x obs) -> BLOCKER;
+  adj_max_bad_fraction: 0.002 #   fewer are isolated vendor glitches (-> warning)
+  request_retries: 4          # Yahoo download attempts (exponential backoff)
+  cache_refresh_hours: 12     # re-download a stale cache at most this often
   benchmark: VOO              # spec §14
   risk_free_ticker: BIL       # T-bill ETF used as Treasury risk-free proxy (spec §6)
   risk_free_fallback: 0.02
+  risk_free_source: etf       # etf (T-bill ETF above) | fred (Treasury yield series; falls back to etf)
+  fred_series: DTB3           # FRED 3-month Treasury bill secondary-market rate
 
 estimation:
   trading_days: 252

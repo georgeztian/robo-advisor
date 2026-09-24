@@ -40,8 +40,8 @@ def _clip(df: pd.DataFrame, start: dt.date, end: dt.date) -> pd.DataFrame:
 
 
 class NYSEHolidayCalendar(AbstractHolidayCalendar):
-    """Regular NYSE holidays (incl. Good Friday; no Columbus/Veterans Day). One-off closures
-    (e.g. national days of mourning) are not modelled and show up as single missing days."""
+    """Regular NYSE holidays (incl. Good Friday; no Columbus/Veterans Day) plus the one-off
+    closures inside the estimation window (national days of mourning, Hurricane Sandy)."""
 
     rules = [
         Holiday("New Year's Day", month=1, day=1, observance=nearest_workday),
@@ -50,7 +50,9 @@ class NYSEHolidayCalendar(AbstractHolidayCalendar):
         Holiday("Independence Day", month=7, day=4, observance=nearest_workday),
         USLaborDay, USThanksgivingDay,
         Holiday("Christmas", month=12, day=25, observance=nearest_workday),
-    ]
+    ] + [Holiday(f"Special closure {d}", year=d.year, month=d.month, day=d.day) for d in (
+        dt.date(2004, 6, 11), dt.date(2007, 1, 2), dt.date(2012, 10, 29), dt.date(2012, 10, 30),
+        dt.date(2018, 12, 5), dt.date(2025, 1, 9))]
 
 
 _BDAY = CustomBusinessDay(calendar=NYSEHolidayCalendar())
@@ -277,43 +279,120 @@ class CSVProvider:
 # --------------------------------------------------------------------------- Yahoo
 
 
-class YahooProvider:
-    """Yahoo Finance via ``yfinance`` (optional dependency: ``pip install robo-advisor[yahoo]``).
+class DataUnavailableError(RuntimeError):
+    """Market data could not be obtained (network, rate limit, unknown ticker)."""
 
-    yfinance returns split-adjusted Close/Dividends; they are converted back to the raw
-    convention above so split handling can be validated. Results are cached as CSV.
+
+def normalize_yahoo(h: pd.DataFrame, ticker: str = "") -> pd.DataFrame:
+    """Convert a ``yfinance`` ``history(auto_adjust=False, actions=True)`` frame to the canonical
+    raw convention.
+
+    Yahoo reports Close and Dividends split-adjusted; they are converted back to raw values
+    (x product of all LATER splits) so split handling can be validated. Fund capital-gain
+    distributions are cash distributions and are added to ``dividend``. Rows without prices
+    (Yahoo sometimes emits a dividend on a non-trading date) pass their distributions and splits
+    to the next priced row. Duplicate dates keep the last row.
+    """
+    if h is None or h.empty:
+        raise DataUnavailableError(f"Yahoo returned no data for {ticker}")
+    missing = {"Close", "Adj Close"} - set(h.columns)
+    if missing:
+        raise DataUnavailableError(f"Yahoo data for {ticker} lacks columns {sorted(missing)}; "
+                                   "request it with auto_adjust=False")
+    h = h.copy()
+    idx = pd.DatetimeIndex(h.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    h.index = idx.normalize()
+    h = h[~h.index.duplicated(keep="last")].sort_index()
+    dist = h.get("Dividends", pd.Series(0.0, index=h.index)).fillna(0.0)
+    if "Capital Gains" in h:
+        dist = dist + h["Capital Gains"].fillna(0.0)
+    splits = h.get("Stock Splits", pd.Series(0.0, index=h.index)).fillna(0.0).replace(0.0, 1.0)
+    priced = h["Close"].notna() & h["Adj Close"].notna() & (h["Close"] > 0) & (h["Adj Close"] > 0)
+    # carry events on unpriced rows to the next priced row
+    group = priced[::-1].cumsum()[::-1]            # rows share a group with the next priced row
+    dist = dist.groupby(group).transform("sum")
+    splits = splits.groupby(group).transform("prod")
+    h, dist, splits = h[priced], dist[priced], splits[priced]
+    if h.empty:
+        raise DataUnavailableError(f"Yahoo returned no priced rows for {ticker}")
+    future = splits[::-1].cumprod()[::-1].shift(-1).fillna(1.0)
+    return pd.DataFrame({
+        "close": h["Close"] * future,
+        "adj_close": h["Adj Close"],
+        "dividend": dist * future,
+        "split_ratio": splits,
+    })
+
+
+class YahooProvider:
+    """Yahoo Finance via ``yfinance`` (optional dependency: ``pip install -e ".[yahoo]"``).
+
+    * Full daily history (``period="max"``), unadjusted Close + Adj Close + actions, with
+      yfinance's price repair (100x errors, bad dividend adjustments) enabled.
+    * Retries with exponential backoff on rate limits / transient network errors.
+    * Cached per ticker as CSV; a cache that ends before the requested end date is refreshed
+      (at most once per ``refresh_hours``), so repeated runs work offline.
     """
 
     name = "yahoo"
     synthetic = False
 
-    def __init__(self, cache_dir: str | Path | None = None):
+    def __init__(self, cache_dir: str | Path | None = None, retries: int = 4, backoff: float = 2.0,
+                 repair: bool = True, refresh_hours: float = 12.0):
         self.cache = Path(cache_dir) if cache_dir else None
+        self.retries, self.backoff, self.repair, self.refresh_hours = retries, backoff, repair, refresh_hours
+
+    @staticmethod
+    def _yf():
+        try:
+            import yfinance as yf  # optional dependency
+        except ImportError as e:  # pragma: no cover - depends on the environment
+            raise DataUnavailableError(
+                "the Yahoo provider needs yfinance: pip install -e \".[yahoo]\"") from e
+        return yf
 
     def _download(self, t: str) -> pd.DataFrame:
-        import yfinance as yf  # optional dependency
+        import time
 
-        h = yf.Ticker(t).history(period="max", auto_adjust=False, actions=True)
-        if h.empty:
-            raise ValueError(f"no Yahoo data for {t}")
-        h.index = h.index.tz_localize(None).normalize()
-        splits = h["Stock Splits"].replace(0, 1.0).fillna(1.0)
-        # factor converting split-adjusted values back to raw: product of FUTURE splits
-        future = splits[::-1].cumprod()[::-1].shift(-1).fillna(1.0)
-        return pd.DataFrame({
-            "close": h["Close"] * future,
-            "adj_close": h["Adj Close"],
-            "dividend": h["Dividends"].fillna(0.0) * future,
-            "split_ratio": splits,
-        })
+        yf = self._yf()
+        last: Exception | None = None
+        for attempt in range(self.retries):
+            try:
+                h = yf.Ticker(t).history(period="max", interval="1d", auto_adjust=False, actions=True,
+                                         repair=self.repair, raise_errors=True)
+                return normalize_yahoo(h, t)
+            except DataUnavailableError:
+                raise
+            except Exception as e:                 # rate limits, timeouts, transient HTTP errors
+                last = e
+                if attempt + 1 < self.retries:
+                    time.sleep(self.backoff * 2**attempt)
+        raise DataUnavailableError(f"could not download {t} from Yahoo after {self.retries} attempts: "
+                                   f"{type(last).__name__}: {last}")
+
+    def _cache_fresh(self, path: Path, df: pd.DataFrame, end: dt.date) -> bool:
+        import time
+
+        last = df.index[-1].date() if len(df) else dt.date.min
+        wanted = min(end, dt.date.today())
+        behind = len(trading_calendar(last + dt.timedelta(days=1), wanted)) if wanted > last else 0
+        if behind <= 1:                            # today's bar may not exist yet
+            return True
+        age_h = (time.time() - path.stat().st_mtime) / 3600
+        return age_h < self.refresh_hours
 
     def fetch(self, tickers: list[str], start: dt.date, end: dt.date) -> dict[str, pd.DataFrame]:
         out = {}
         for t in tickers:
             path = self.cache / f"{t}.csv" if self.cache else None
+            df = None
             if path is not None and path.exists():
                 df = pd.read_csv(path, parse_dates=["date"], index_col="date")
-            else:
+                if not self._cache_fresh(path, df, end):
+                    df = None
+            if df is None:
                 df = self._download(t)
                 if path is not None:
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -322,12 +401,40 @@ class YahooProvider:
         return out
 
 
+FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}&cosd={start}&coed={end}"
+
+
+def fetch_treasury_rate(series: str, start: dt.date, end: dt.date, cache_dir: str | Path | None = None,
+                        reader=None) -> pd.Series:
+    """Daily Treasury rate from FRED (e.g. DTB3 = 3-month T-bill), as an annual decimal rate.
+    ``reader`` (url -> DataFrame) is injectable for tests; defaults to ``pandas.read_csv``."""
+    path = Path(cache_dir) / f"FRED_{series}.csv" if cache_dir else None
+    if path is not None and path.exists():
+        cached = pd.read_csv(path, parse_dates=["date"], index_col="date")["rate"]
+        if len(cached) and cached.index[0].date() <= start + dt.timedelta(days=7) and \
+                cached.index[-1].date() >= min(end, dt.date.today()) - dt.timedelta(days=7):
+            return cached[(cached.index >= pd.Timestamp(start)) & (cached.index <= pd.Timestamp(end))]
+    try:
+        raw = (reader or pd.read_csv)(FRED_URL.format(series=series, start=start, end=end))
+    except Exception as e:
+        raise DataUnavailableError(f"could not download FRED series {series}: {e}") from e
+    date_col = next(c for c in raw.columns if c.lower() in ("date", "observation_date"))
+    rate = pd.to_numeric(raw[series], errors="coerce") / 100
+    out = pd.Series(rate.to_numpy(), index=pd.to_datetime(raw[date_col]), name="rate").dropna()
+    if out.empty:
+        raise DataUnavailableError(f"FRED series {series} returned no observations")
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        out.rename_axis("date").to_csv(path)
+    return out[(out.index >= pd.Timestamp(start)) & (out.index <= pd.Timestamp(end))]
+
+
 def make_provider(kind: str, *, csv_dir: str = "data/prices", cache_dir: str | None = None,
-                  seed: int = 26) -> DataProvider:
+                  seed: int = 26, retries: int = 4, refresh_hours: float = 12.0) -> DataProvider:
     if kind == "synthetic":
         return SyntheticProvider(seed=seed)
     if kind == "csv":
         return CSVProvider(csv_dir)
     if kind == "yahoo":
-        return YahooProvider(cache_dir)
+        return YahooProvider(cache_dir, retries=retries, refresh_hours=refresh_hours)
     raise ValueError(f"unknown data provider {kind!r}")

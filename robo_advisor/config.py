@@ -60,9 +60,16 @@ class DataCfg(BaseModel):
     max_missing_fraction: float = 0.02
     max_ffill_days: int = 3
     adj_consistency_tol: float = 0.002
+    adj_split_error: float = 0.25
+    adj_max_bad_days: int = 3
+    adj_max_bad_fraction: float = 0.002
+    request_retries: int = 4
+    cache_refresh_hours: float = 12.0
     benchmark: str = "VOO"
     risk_free_ticker: str = "BIL"
     risk_free_fallback: float = 0.02
+    risk_free_source: Literal["etf", "fred"] = "etf"
+    fred_series: str = "DTB3"
 
 
 class EstimationCfg(BaseModel):

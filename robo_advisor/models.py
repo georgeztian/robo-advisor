@@ -133,6 +133,9 @@ class MarketData:
     as_of: dt.date
     source: str
     synthetic: bool
+    risk_free_series: pd.Series | None = None      # annual decimal Treasury rate (e.g. FRED DTB3)
+    risk_free_source: str = "T-bill ETF proxy"
+    notes: list[str] = field(default_factory=list)
 
     def tickers(self) -> list[str]:
         return list(self.frames)
@@ -184,6 +187,7 @@ class Estimates:
     monthly_income: pd.DataFrame | None = None   # monthly distribution yield per ETF
     mu_after_tax: np.ndarray | None = None
     psd_repaired: bool = False
+    risk_free_source: str = "T-bill ETF proxy"
 
     def mu_for_optimizer(self) -> np.ndarray:
         """Spec §5: the optimizer uses after-tax returns when taxes are enabled."""

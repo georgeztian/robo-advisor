@@ -81,7 +81,9 @@ def complete_months(monthly: pd.DataFrame, as_of: dt.date) -> pd.DataFrame:
 
 
 def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date,
-             window_start: dt.date, data_cfg: DataCfg, cfg: EstimationCfg) -> Estimates:
+             window_start: dt.date, data_cfg: DataCfg, cfg: EstimationCfg,
+             risk_free_series: pd.Series | None = None,
+             risk_free_source: str = "T-bill ETF proxy") -> Estimates:
     for t in tickers:
         if t not in frames or len(frames[t]) < 2:
             raise EstimationError(f"no usable price history for {t} up to {as_of}")
@@ -114,11 +116,17 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
     income_yield = (monthly_income.mean() * 12).fillna(0.0).to_numpy()
 
     rf_t = data_cfg.risk_free_ticker
-    if rf_t in frames and len(frames[rf_t]) > 60:
+    if risk_free_series is not None and len(risk_free_series.dropna()) > 20:
+        rs = risk_free_series[(risk_free_series.index >= pd.Timestamp(window_start))
+                              & (risk_free_series.index <= pd.Timestamp(as_of))]
+        risk_free = float(rs.mean())
+    elif rf_t in frames and len(frames[rf_t]) > 60:
+        risk_free_source = "T-bill ETF proxy"
         rf_m = complete_months(month_end_prices(frames[rf_t][["adj_close"]])["adj_close"].pct_change().dropna(), as_of)
         risk_free = float(rf_m.mean() * 12)
     else:
         risk_free = data_cfg.risk_free_fallback
+        risk_free_source = "configured fallback"
 
     bench_t = data_cfg.benchmark
     bench = frames[bench_t]["adj_close"].pct_change() if bench_t in frames else None
@@ -153,7 +161,7 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
                      risk_free=risk_free, daily_returns=daily, monthly_returns=monthly,
                      income_yield=income_yield, stats=stats, window_start=window_start,
                      window_end=as_of, history_years=hist_years, monthly_income=monthly_income,
-                     psd_repaired=repaired)
+                     psd_repaired=repaired, risk_free_source=risk_free_source)
 
 
 def portfolio_risk_stats(w: np.ndarray, est: Estimates, conf: float = 0.95) -> dict:

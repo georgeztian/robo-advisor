@@ -150,7 +150,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         "contributions and monthly return convention.",
     ]
     assumptions = [
-        f"Risk-free rate (T-bill ETF proxy): {est.risk_free:.2%} per year.",
+        f"Risk-free rate ({est.risk_free_source}): {est.risk_free:.2%} per year.",
         f"Inflation assumption: {inflation:.1%} per year (real value of the deterministic projection: "
         f"{_money(proj.fv_real)}).",
         f"Constraints: {'short sales allowed, gross exposure <= ' + format(port.constraints.max_gross_leverage, '.0%') if port.constraints.allow_short else 'long-only'}"
