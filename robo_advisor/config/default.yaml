@@ -1,0 +1,170 @@
+# Default configuration for the robo-advisor.
+# Every threshold, cutoff and limit used by the engine lives here (spec §2C: "The exact
+# cutoffs and volatility limits should be configurable rather than hard-coded").
+
+risk_bands:            # mapped risk score -> profile -> max annual volatility (spec §2C table)
+  - {max_score: 20,  profile: Very Conservative, max_volatility: 0.05}
+  - {max_score: 40,  profile: Conservative,      max_volatility: 0.08}
+  - {max_score: 60,  profile: Moderate,          max_volatility: 0.12}
+  - {max_score: 80,  profile: Growth,            max_volatility: 0.17}
+  - {max_score: 100, profile: Aggressive,        max_volatility: 0.25}
+
+risk_mapping: min      # "min" = min(capacity, tolerance) (conservative mapping, spec §2C)
+
+questionnaire:
+  capacity:            # spec §2A — financial ABILITY to bear losses
+    - id: annual_income
+      text: What is your annual household income?
+      weight: 0.08
+      options: {under_50k: 15, 50k_100k: 40, 100k_200k: 65, 200k_500k: 85, over_500k: 100}
+    - id: liquid_assets
+      text: How large are your liquid financial assets (cash, deposits, brokerage) relative to annual expenses?
+      weight: 0.10
+      options: {under_6m: 10, 6m_1y: 35, 1y_3y: 60, 3y_10y: 85, over_10y: 100}
+    - id: investable_assets
+      text: What share of your total investable assets does this portfolio represent?
+      weight: 0.10
+      options: {over_75pct: 15, 50_75pct: 40, 25_50pct: 65, 10_25pct: 85, under_10pct: 100}
+    - id: emergency_savings
+      text: How many months of expenses do you hold as emergency savings outside this portfolio?
+      weight: 0.10
+      options: {none: 0, under_3m: 25, 3_6m: 60, 6_12m: 85, over_12m: 100}
+    - id: debt_obligations
+      text: How large are your debt payments (excluding a mortgage at a sustainable level) relative to income?
+      weight: 0.08
+      options: {over_40pct: 5, 25_40pct: 30, 10_25pct: 60, under_10pct: 85, none: 100}
+    - id: income_stability
+      text: How stable is your employment / income?
+      weight: 0.10
+      options: {very_unstable: 10, somewhat_unstable: 35, average: 60, stable: 85, very_stable: 100}
+    - id: large_expenditures
+      text: Do you expect large expenditures (home, tuition, medical) funded from this portfolio in the next 5 years?
+      weight: 0.10
+      options: {certain_large: 10, likely: 35, possible: 60, unlikely: 85, none: 100}
+    - id: investment_horizon
+      text: What is your investment horizon for this portfolio?
+      weight: 0.14
+      derive_from_goal: true          # auto-answered from target date / stated horizon when omitted
+      options: {under_3y: 5, 3_5y: 30, 5_10y: 60, 10_20y: 85, over_20y: 100}
+    - id: portfolio_dependence
+      text: How much do you depend on this portfolio for near-term financial needs?
+      weight: 0.10
+      options: {fully: 5, largely: 30, partially: 60, slightly: 85, not_at_all: 100}
+    - id: continue_investing
+      text: Could you keep making contributions after a large market decline?
+      weight: 0.10
+      options: {"no": 10, probably_not: 35, unsure: 55, probably: 80, definitely: 100}
+  tolerance:           # spec §2B — psychological WILLINGNESS to bear losses
+    - id: decline_reaction
+      text: Your portfolio falls 10%, then 20%, then 40%. At what point would you sell?
+      weight: 0.20
+      options: {sell_at_10: 5, sell_at_20: 30, sell_at_40: 60, hold_through_40: 85, buy_more: 100}
+    - id: temporary_losses
+      text: How willing are you to accept temporary losses to pursue higher long-term returns?
+      weight: 0.15
+      options: {not_willing: 5, slightly: 30, moderately: 60, very: 85, extremely: 100}
+    - id: stable_vs_volatile
+      text: Which do you prefer?
+      weight: 0.15
+      options: {stable_low: 10, mostly_stable: 35, balanced: 60, mostly_growth: 85, volatile_high: 100}
+    - id: equity_comfort
+      text: How comfortable are you with an equity-heavy portfolio?
+      weight: 0.15
+      options: {very_uncomfortable: 5, uncomfortable: 30, neutral: 55, comfortable: 80, very_comfortable: 100}
+    - id: experience
+      text: What is your previous investment experience?
+      weight: 0.10
+      options: {none: 10, savings_only: 30, funds: 60, stocks_etfs: 85, advanced: 100}
+    - id: crash_behavior
+      text: During past (or hypothetical) market crashes, did/would you remain invested?
+      weight: 0.15
+      options: {sold_everything: 5, sold_some: 30, held: 70, bought_more: 100}
+    - id: preserve_vs_growth
+      text: Preserve principal or pursue higher growth?
+      weight: 0.10
+      options: {preserve: 5, mostly_preserve: 30, balance: 60, mostly_growth: 85, growth: 100}
+
+universe:
+  default: [VOO, VTI, BND, TLT, BIL, GLD, QQQ, TQQQ, VXUS, VT, VWO, VNQ, SCHH, SCHD, VYM, DGRO]
+  optional_extra: [SGOV]      # appears in the spec §10 example but not in the §3 list
+
+data:
+  provider: synthetic         # synthetic | csv | yahoo
+  csv_dir: data/prices
+  cache_dir: .cache/prices
+  lookback_years: 20          # spec §3/§6: most recent 20 years
+  min_history_years: 20       # below this an ETF is flagged; max available history is used
+  max_missing_fraction: 0.02  # of expected trading days, per ETF (above -> BLOCKER)
+  max_ffill_days: 3           # short gaps forward-filled for alignment (and flagged)
+  adj_consistency_tol: 0.002  # max daily abs gap between adj-close return and close+div+split return
+  benchmark: VOO              # spec §14
+  risk_free_ticker: BIL       # T-bill ETF used as Treasury risk-free proxy (spec §6)
+  risk_free_fallback: 0.02
+
+estimation:
+  trading_days: 252
+  mu_shrinkage: 0.0           # 0 = pure historical mean; >0 shrinks toward cross-sectional mean
+  var_confidence: 0.95
+  min_overlap_days: 252       # pairwise covariance needs this many overlapping observations
+
+optimization:
+  default_method: mean_variance   # mean_variance | min_volatility | max_sharpe | cvar | target_return | risk_parity | max_diversification
+  max_position: 0.50              # spec §4 (applies to |w_i|)
+  max_gross_leverage: 1.5         # L when shorting is allowed (spec §4)
+  n_starts: 6                     # multi-start SLSQP
+  tolerance: 1.0e-4               # constraint slack accepted by the reviewer
+  cvar_alpha: 0.95
+  goal:
+    target_probability: 0.80      # p in P(F_T >= F*) >= p (spec §7)
+    risk_metric: volatility       # volatility | cvar
+    frontier_points: 25
+    search_paths: 2000
+    probability_margin: 0.01      # search requires P >= p + margin to survive re-simulation
+
+simulation:
+  n_paths: 10000                  # spec §12
+  seed: 20260924
+  distribution: lognormal         # lognormal (MVN monthly log returns) | bootstrap
+  percentiles: [10, 25, 50, 75, 90]
+  inflation: 0.025
+
+rebalancing:
+  type: calendar                  # calendar | threshold (spec §17)
+  frequency: quarterly            # monthly | quarterly | annual
+  threshold: 0.05                 # absolute weight drift that triggers rebalance
+
+scenarios:                        # spec §13 — scenarios, NOT forecasts
+  conservative: {mu_shift: -0.02, vol_multiplier: 1.20}
+  base:         {mu_shift: 0.0,   vol_multiplier: 1.00}
+  optimistic:   {mu_shift: 0.015, vol_multiplier: 0.90}
+  n_paths: 5000
+
+benchmark:
+  years: 10                       # spec §14
+
+tax:                              # spec §5 — estimated tax model, not individualized advice
+  ordinary_rate: 0.24
+  qualified_dividend_rate: 0.15
+  ltcg_rate: 0.15
+  stcg_rate: 0.24
+  collectibles_rate: 0.28         # e.g. physically-backed gold ETFs such as GLD
+  state_rate: 0.0
+  capital_loss_ordinary_offset: 3000
+  assumed_turnover: 0.10          # annual realized fraction used for the after-tax return series
+  liquidate_at_horizon: false
+
+monitoring:                       # spec §18 review triggers
+  target_probability_floor: 0.70
+  risk_limit_tolerance: 0.005
+  volatility_change_trigger: 0.25   # relative change in estimated portfolio vol
+  correlation_change_trigger: 0.20  # mean absolute change in pairwise correlation
+  contribution_change_trigger: 0.10
+
+review:                           # independent reviewer agent tolerances
+  mu_abs_tol: 5.0e-4              # |mu_reviewer - mu_production| (annual)
+  sigma_rel_tol: 0.02             # relative volatility difference (calendar alignment effects)
+  mc_z: 4.0                       # MC probability comparisons use z * standard error
+  mc_paths: 4000                  # reviewer's own Monte Carlo
+  optimality_samples: 20000       # random feasible portfolios for the optimality spot-check
+  optimality_tol: 0.0025          # sampled return may not beat the optimizer by more than this
+  wealth_rel_tol: 1.0e-6          # deterministic recomputations (FV, backtests, allocations)
