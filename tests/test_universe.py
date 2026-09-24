@@ -1,6 +1,8 @@
 """The ETF universe: exactly the configured 25 ETFs in 9 categories, chosen by category."""
 import dataclasses
 
+import numpy as np
+
 import pytest
 
 from robo_advisor.cli import choose_etfs
@@ -68,3 +70,51 @@ def test_reviewer_blocks_missing_special_risk_disclosure(settings, no_target_run
         ex, disclosures=[d for d in ex.disclosures if not d.startswith(RISK_NOTE_PREFIX)])
     blockers = {f.rule_id for f in Reviewer(settings).review_final(st).blocking}
     assert "R-EXP-07" in blockers
+
+
+def test_category_limits_from_config_and_client(settings, provider):
+    from conftest import load_client
+    from robo_advisor.agents.advisory import build_advisory_graph
+    c = load_client("client_no_target.json")
+    c = c.model_copy(update={"constraints": c.constraints.model_copy(
+        update={"category_limits": {"Crypto ETFs": 0.02, "Equity ETFs": 0.40}})})
+    res = build_advisory_graph(settings, provider).run({"client": c})
+    caps = {cap.category: cap.limit for cap in res.state["constraints"].category_caps}
+    assert caps == {"Equity ETFs": 0.40, "Income ETFs": 0.25, "Commodity ETFs": 0.20,
+                    "Real Estate ETFs": 0.20, "Crypto ETFs": 0.02}  # config defaults + client overrides
+    w = res.state["portfolio"].weight_map()
+    assert w["IBIT"] <= 0.02 + 1e-6
+    assert sum(w[t] for t in ("SPY", "VOO", "VTI", "QQQ", "TQQQ")) <= 0.40 + 1e-6
+    assert all(r.ok for r in res.latest_reviews())
+
+
+def test_reviewer_blocks_category_limit_breach(settings, no_target_run):
+    st = dict(no_target_run.state)
+    p = st["portfolio"]
+    w = np.zeros(len(p.tickers))
+    w[p.tickers.index("IBIT")], w[p.tickers.index("BND")] = 0.3, 0.7
+    st["portfolio"] = dataclasses.replace(p, weights=w)
+    assert "R-PORT-15" in {f.rule_id for f in Reviewer(settings).review_portfolio(st).blocking}
+
+
+def test_unknown_category_limit_is_an_input_problem(settings, provider):
+    from conftest import load_client
+    from robo_advisor.agents.advisory import build_advisory_graph
+    c = load_client("client_target.json")
+    c = c.model_copy(update={"constraints": c.constraints.model_copy(update={"category_limits": {"Crypto": 0.1}})})
+    with pytest.raises(ValueError, match="unknown categories"):
+        build_advisory_graph(settings, provider).run({"client": c})
+
+
+def test_optimizer_question_lists_every_method(settings, monkeypatch, capsys):
+    from robo_advisor.cli import _ask_optimizer
+    from robo_advisor.optimization.methods import METHODS
+    answers = iter(["5", "0.06"])                          # 5 = target_return, then the return
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert _ask_optimizer(settings, has_target=False) == {"optimization_method": "target_return",
+                                                           "target_return": 0.06}
+    out = capsys.readouterr().out
+    assert all(f"{i}." in out for i in range(1, len(METHODS) + 1))
+    answers = iter(["90", "2"])                            # target client: probability, CVaR
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert _ask_optimizer(settings, has_target=True) == {"target_probability": 0.9, "goal_risk_metric": "cvar"}

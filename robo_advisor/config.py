@@ -116,6 +116,7 @@ class OptimizationCfg(BaseModel):
     default_method: Method = "mean_variance"
     max_position: float = Field(0.5, gt=0, le=1)
     max_gross_leverage: float = Field(1.5, ge=1)
+    category_limits: dict[str, float] = {}       # max share of the portfolio per ETF category
     n_starts: int = 6
     tolerance: float = 1e-4
     cvar_alpha: float = 0.95
@@ -197,6 +198,15 @@ class Settings(BaseModel):
     tax: TaxCfg = TaxCfg()
     monitoring: MonitoringCfg = MonitoringCfg()
     review: ReviewCfg = ReviewCfg()
+
+    @model_validator(mode="after")
+    def _category_limits_known(self):
+        for cat, lim in self.optimization.category_limits.items():
+            if cat not in self.universe.categories:
+                raise ValueError(f"category limit for unknown category {cat!r}")
+            if not 0 < lim <= 1:
+                raise ValueError(f"category limit for {cat!r} must be in (0, 1], got {lim}")
+        return self
 
     @model_validator(mode="after")
     def _bands_cover_0_100(self):

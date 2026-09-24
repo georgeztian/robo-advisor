@@ -40,7 +40,7 @@ def _money(x: float) -> str:
 
 
 def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port: np.ndarray,
-            max_pos: float, mu: np.ndarray) -> str:
+            max_pos: float, mu: np.ndarray, capped: dict[str, str] | None = None) -> str:
     t = est.tickers[i]
     if abs(w[i]) < 1e-6:
         held = [j for j in range(len(w)) if w[j] > 1e-6]
@@ -57,6 +57,8 @@ def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port:
     parts = []
     if abs(w[i] - max_pos) < 1e-4:
         parts.append(f"at the {max_pos:.0%} position cap")
+    if capped and t in capped:
+        parts.append(capped[t])
     if est.sigma[i] < 0.03:
         parts.append(f"stabilizer: very low volatility ({est.sigma[i]:.1%})")
     elif corr_to_port[i] < 0.3:
@@ -80,6 +82,13 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     port_cov = est.cov @ w
     sp = np.sqrt(w @ est.cov @ w)
     corr_to_port = np.array([port_cov[i] / (est.sigma[i] * sp) if est.sigma[i] > 0 else 0 for i in range(len(w))])
+    # ETFs whose category is filled up to its limit
+    capped: dict[str, str] = {}
+    for cap in port.constraints.category_caps:
+        used = sum(abs(w[est.tickers.index(t)]) for t in cap.tickers)
+        if used >= cap.limit - 1e-4:
+            for t in cap.tickers:
+                capped[t] = f"its category ({cap.category}) is at the {cap.limit:.0%} category limit"
     rows = []
     for i, t in enumerate(est.tickers):
         rows.append({
@@ -89,7 +98,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             "Est. return": mu[i], "Volatility": est.sigma[i], "Corr. to portfolio": corr_to_port[i],
             "Risk contribution": rc[i], "History (yrs)": est.history_years[t],
             "Expense ratio": CATALOG[t].expense_ratio,
-            "Rationale": _reason(i, w, est, rc, corr_to_port, port.constraints.max_position, mu),
+            "Rationale": _reason(i, w, est, rc, corr_to_port, port.constraints.max_position, mu, capped),
         })
     table = pd.DataFrame(rows).set_index("ETF")
 
@@ -156,7 +165,9 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         f"Inflation assumption: {inflation:.1%} per year (real value of the deterministic projection: "
         f"{_money(proj.fv_real)}).",
         f"Constraints: {'short sales allowed, gross exposure <= ' + format(port.constraints.max_gross_leverage, '.0%') if port.constraints.allow_short else 'long-only'}"
-        f", max position {port.constraints.max_position:.0%}, max volatility {port.constraints.max_volatility:.0%}.",
+        f", max position {port.constraints.max_position:.0%}, max volatility {port.constraints.max_volatility:.0%}"
+        + (", category limits " + ", ".join(f"{c.category} {c.limit:.0%}" for c in port.constraints.category_caps)
+           if port.constraints.category_caps else "") + ".",
         "Scenario shifts: " + "; ".join(f"{s.name} {s.mu_shift:+.1%} return, x{s.vol_multiplier:.2f} volatility"
                                          for s in scenarios) + ".",
     ]

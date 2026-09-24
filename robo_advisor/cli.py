@@ -24,7 +24,7 @@ from .data.providers import DataUnavailableError, make_provider
 from .data.validation import validate
 from .graph.engine import GraphHalted
 from .models import ClientInput
-from .optimization.methods import METHODS
+from .optimization.methods import GOAL_RISK_METRICS, METHOD_DESCRIPTIONS
 from .universe import CATALOG
 from .report.html import audit_bundle, render
 
@@ -122,6 +122,61 @@ def choose_etfs(s: Settings) -> list[str]:
         print("\nSelect at least one ETF.")
 
 
+def _menu(title: str, options: dict[str, str], default: str) -> str:
+    keys = list(options)
+    print(title)
+    for i, k in enumerate(keys, 1):
+        print(f"   {i}. {options[k]}" + ("  [default]" if k == default else ""))
+    k = _ask("  choice", keys.index(default) + 1, int, list(range(1, len(keys) + 1)))
+    return keys[k - 1]
+
+
+def _fraction(prompt: str, default: float) -> float:
+    while True:
+        v = _ask(prompt, default, float)
+        if 0 < v <= 1:
+            return v
+        print("  enter a fraction between 0 and 1, e.g. 0.25 for 25%")
+
+
+def _ask_category_limits(s: Settings, universe: list[str]) -> dict[str, float]:
+    """Show the category limits that apply to the chosen ETFs; let the client change them."""
+    cats = [c for c, ts in s.universe.categories.items() if any(t in universe for t in ts)]
+    defaults = s.optimization.category_limits
+    print("\nCategory limits (maximum share of the portfolio per category):")
+    for c in cats:
+        print(f"   {c:<36} {defaults[c]:.0%}" if c in defaults else f"   {c:<36} no limit")
+    if _yes("Keep these category limits?", True):
+        return {}
+    changed = {}
+    for c in cats:
+        v = _fraction(f"  Max share for {c} (1 = no limit)", defaults.get(c, 1.0))
+        if v != defaults.get(c, 1.0):
+            changed[c] = v
+    return changed
+
+
+def _ask_optimizer(s: Settings, has_target: bool) -> dict:
+    print("\n== Step 6: How the portfolio is optimized ==")
+    prefs: dict = {}
+    if has_target:
+        print("With a target, the optimizer picks the LOWEST-RISK portfolio that reaches the target with\n"
+              "the probability you require, within your risk limit.")
+        p = _ask("Required probability of reaching the target, in %",
+                 round(s.optimization.goal.target_probability * 100), float)
+        prefs["target_probability"] = min(max(p, 1.0), 99.0) / 100
+        prefs["goal_risk_metric"] = _menu("How should risk be measured?", GOAL_RISK_METRICS,
+                                          s.optimization.goal.risk_metric)
+        return prefs
+    print("Without a target, choose how the portfolio is built. Every option stays within your risk\n"
+          "limit and the position / category limits.")
+    prefs["optimization_method"] = _menu("Optimization method:", METHOD_DESCRIPTIONS,
+                                         s.optimization.default_method)
+    if prefs["optimization_method"] == "target_return":
+        prefs["target_return"] = _ask("Target annual return (e.g. 0.06 for 6%)", cast=float)
+    return prefs
+
+
 def interactive_client(s: Settings) -> ClientInput:
     print("\n== Step 1-2: Investment goal ==")
     name = _ask("Your name", "Client")
@@ -158,6 +213,9 @@ def interactive_client(s: Settings) -> ClientInput:
             "max_position": _ask("Maximum position size (fraction)", s.optimization.max_position, float)}
     if allow_short:
         cons["max_gross_leverage"] = _ask("Maximum gross exposure L", s.optimization.max_gross_leverage, float)
+    limits = _ask_category_limits(s, universe)
+    if limits:
+        cons["category_limits"] = limits
     taxes = {"enabled": _yes("Should taxes be incorporated?", False)}
     if taxes["enabled"]:
         t = s.tax
@@ -166,12 +224,7 @@ def interactive_client(s: Settings) -> ClientInput:
                   "ltcg_rate": _ask("Long-term capital-gains rate", t.ltcg_rate, float),
                   "stcg_rate": _ask("Short-term capital-gains rate", t.stcg_rate, float),
                   "state_rate": _ask("State tax rate", t.state_rate, float)}
-    prefs = {}
-    if not has_target:
-        prefs["optimization_method"] = _ask("Optimization method", s.optimization.default_method,
-                                            choices=list(METHODS))
-        if prefs["optimization_method"] == "target_return":
-            prefs["target_return"] = _ask("Target annual return (e.g. 0.06 for 6%)", cast=float)
+    prefs = _ask_optimizer(s, has_target)
     return ClientInput.model_validate({"profile": {"name": name}, "goal": goal, "capacity_answers": cap,
                                        "tolerance_answers": tol, "universe": universe, "constraints": cons,
                                        "taxes": taxes, "preferences": prefs})

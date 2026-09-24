@@ -112,9 +112,11 @@ def _space(n: int, short: bool):
 
 def resolve(kind: str, mu_long: np.ndarray, mu_short: np.ndarray, cov: np.ndarray, short: bool,
             max_pos: float, gross: float, vol_cap: float, rf: float = 0.0, min_return: float | None = None,
-            starts: int = 8, seed: int = 4242) -> tuple[np.ndarray | None, float]:
+            starts: int = 8, seed: int = 4242,
+            groups: list[tuple[np.ndarray, float]] = ()) -> tuple[np.ndarray | None, float]:
     """kind: 'max_return' | 'min_vol' | 'max_sharpe'. Returns (w, objective value in natural units:
-    return for max_return, volatility for min_vol, Sharpe for max_sharpe)."""
+    return for max_return, volatility for min_vol, Sharpe for max_sharpe). ``groups`` are
+    (0/1 membership vector, limit) pairs: sum of |w| over each group <= limit."""
     from scipy.optimize import minimize
 
     n = len(mu_long)
@@ -136,6 +138,9 @@ def resolve(kind: str, mu_long: np.ndarray, mu_short: np.ndarray, cov: np.ndarra
         cons.append({"type": "ineq", "fun": lambda x: gross - x.sum()})
     if min_return is not None:
         cons.append({"type": "ineq", "fun": lambda x: ret(x) - min_return})
+    for member, lim in groups:
+        g = np.concatenate([member, member]) if short else member
+        cons.append({"type": "ineq", "fun": lambda x, g=g, lim=lim: lim - g @ x})
     rng = np.random.default_rng(seed)
     best, best_val = None, np.inf
     for k in range(starts):
@@ -150,7 +155,8 @@ def resolve(kind: str, mu_long: np.ndarray, mu_short: np.ndarray, cov: np.ndarra
         ok = (abs(w.sum() - 1) < 1e-6 and np.abs(w).max() <= max_pos + 1e-6
               and (kind == "min_vol" or vol(x) <= vol_cap + 1e-6)
               and (not short or np.abs(w).sum() <= gross + 1e-6)
-              and (min_return is None or ret(x) >= min_return - 1e-7))
+              and (min_return is None or ret(x) >= min_return - 1e-7)
+              and all(m @ np.abs(w) <= lim + 1e-6 for m, lim in groups))
         if ok and r.fun < best_val:
             best, best_val = w, r.fun
     if best is None:

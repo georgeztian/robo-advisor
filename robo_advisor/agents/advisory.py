@@ -20,7 +20,8 @@ from ..data.validation import validate
 from ..estimation import estimate, portfolio_risk_stats
 from ..explain import explain
 from ..graph.engine import Graph, Node
-from ..models import (ClientInput, MarketData, Portfolio, Request, ResolvedConstraints, TaxContext)
+from ..models import (CategoryCap, ClientInput, MarketData, Portfolio, Request, ResolvedConstraints,
+                      TaxContext)
 from ..optimization.goal import goal_search
 from ..optimization.methods import METHODS, Optimizer
 from ..projection import project
@@ -186,13 +187,22 @@ class ConstraintAgent:
 
     def __call__(self, st):
         req, risk = st["request"], st["risk"]
-        c, o = req.client.constraints, self.sv.settings.optimization
+        s = self.sv.settings
+        c, o = req.client.constraints, s.optimization
+        unknown = set(c.category_limits or {}) - set(s.universe.categories)
+        if unknown:
+            raise ValueError(f"category_limits names unknown categories {sorted(unknown)}; "
+                             f"categories are: {', '.join(s.universe.categories)}")
+        limits = {**o.category_limits, **(c.category_limits or {})}
+        caps = [CategoryCap(cat, lim, [t for t in tickers if t in req.tickers])
+                for cat, tickers in s.universe.categories.items()
+                if (lim := limits.get(cat, 1.0)) < 1.0 and any(t in req.tickers for t in tickers)]
         rc = ResolvedConstraints(
             tickers=req.tickers, allow_short=c.allow_short,
             max_position=c.max_position if c.max_position is not None else o.max_position,
             max_gross_leverage=(c.max_gross_leverage if c.max_gross_leverage is not None
                                 else o.max_gross_leverage) if c.allow_short else 1.0,
-            max_volatility=risk.max_volatility)
+            max_volatility=risk.max_volatility, category_caps=caps)
         return {"constraints": rc}
 
 

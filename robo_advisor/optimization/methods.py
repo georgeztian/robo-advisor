@@ -23,6 +23,22 @@ from .constraints import InfeasibleError, Space
 METHODS = ("mean_variance", "min_volatility", "max_sharpe", "cvar", "target_return",
            "risk_parity", "max_diversification")
 
+# Plain-language descriptions shown to clients (questionnaire, README). Every method keeps the
+# portfolio within the client's risk limit and position / category limits.
+METHOD_DESCRIPTIONS = {
+    "mean_variance": "Highest expected return within your risk limit (recommended; the classic approach)",
+    "min_volatility": "Smallest ups and downs possible, whatever the return",
+    "max_sharpe": "Best return per unit of risk (Sharpe ratio)",
+    "cvar": "Smallest average loss in the worst 5% of months (tail-risk focus)",
+    "target_return": "Smallest ups and downs that still earn a return you choose",
+    "risk_parity": "Every ETF contributes the same share of total risk (balanced, long-only)",
+    "max_diversification": "Most diversified mix: least overlap between the ETFs' movements (long-only)",
+}
+GOAL_RISK_METRICS = {
+    "volatility": "Volatility: how much the portfolio value moves up and down (recommended)",
+    "cvar": "Tail risk (CVaR): the average final value in the worst 5% of simulated futures",
+}
+
 METHOD_LABELS = {
     "mean_variance": "Mean-variance: maximize expected return subject to the volatility limit",
     "min_volatility": "Minimum volatility",
@@ -186,6 +202,10 @@ class Optimizer:
         if sp.short:
             A_ub = np.vstack([A_ub, np.concatenate([np.ones(d), [0.0], np.zeros(S)])])
             b_ub = np.append(b_ub, self.rc.max_gross_leverage)
+        for _, lim, m in sp.cap_groups():
+            g = np.concatenate([m, m]) if sp.short else m
+            A_ub = np.vstack([A_ub, np.concatenate([g, [0.0], np.zeros(S)])])
+            b_ub = np.append(b_ub, lim)
         sum_row = np.concatenate([np.ones(n), -np.ones(n)]) if sp.short else np.ones(n)
         A_eq = np.concatenate([sum_row, [0.0], np.zeros(S)])[None, :]
         bounds = sp.bounds() + [(None, None)] + [(0, None)] * S
@@ -196,6 +216,11 @@ class Optimizer:
         w, t = self.blend_to_cap(w)
         notes = [f"blended {t:.0%} toward minimum-volatility to satisfy the volatility limit"] if t > 0 else []
         return OptResult(w, "cvar", notes, {"monthly_cvar": float(res.fun), "alpha": a, "scenarios": S})
+
+    def _cap_cons_long(self) -> list[dict]:
+        """Category limits for the long-only formulations (risk parity, max diversification)."""
+        return [{"type": "ineq", "fun": lambda w, m=m, lim=lim: lim - m @ w, "jac": lambda w, m=m: -m}
+                for _, lim, m in self.space.cap_groups()]
 
     def _long_only_space_note(self, w: np.ndarray) -> list[str]:
         if not self.rc.allow_short:
@@ -217,7 +242,7 @@ class Optimizer:
             drc = (np.diag(sw) + w[:, None] * cov) / var - np.outer(rc, 2 * sw) / var
             return float(diff @ diff), 2 * drc.T @ diff
 
-        cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}]
+        cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}] + self._cap_cons_long()
         iv = 1 / np.sqrt(np.diag(cov))
         x0 = np.minimum(iv / iv.sum(), m)
         x0 = x0 / x0.sum()
@@ -239,7 +264,7 @@ class Optimizer:
             num = sig @ w
             return -num / s, -(sig / s - num * (cov @ w) / s**3)
 
-        cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}]
+        cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}] + self._cap_cons_long()
         res = minimize(f, np.full(n, 1 / n), jac=True, method="SLSQP", bounds=[(0, m)] * n,
                        constraints=cons, options={"maxiter": 1000, "ftol": 1e-14})
         w = self._clean(np.clip(res.x, 0, m))

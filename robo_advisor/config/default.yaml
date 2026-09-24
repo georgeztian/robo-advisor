@@ -127,6 +127,11 @@ optimization:
   default_method: mean_variance   # mean_variance | min_volatility | max_sharpe | cvar | target_return | risk_parity | max_diversification
   max_position: 0.50              # spec §4 (applies to |w_i|)
   max_gross_leverage: 1.5         # L when shorting is allowed (spec §4)
+  category_limits:                # max share of the portfolio per ETF category (unlisted = no limit);
+    Crypto ETFs: 0.05             #   a client profile can override any of them
+    Income ETFs: 0.25
+    Commodity ETFs: 0.20
+    Real Estate ETFs: 0.20
   n_starts: 6                     # multi-start SLSQP
   tolerance: 1.0e-4               # constraint slack accepted by the reviewer
   cvar_alpha: 0.95

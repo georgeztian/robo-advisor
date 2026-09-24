@@ -29,7 +29,7 @@ a report is produced.
 | Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 7 risk-tolerance questions, ETF choice by category, short-selling / position / tax preferences |
 | Risk profile | Capacity and tolerance scores (0–100) are kept separate. **Mapped score = min(capacity, tolerance)**, which maps to a volatility limit (5 %–25 %, configurable) |
 | Market data | Up to 20 years of daily prices (real data from Yahoo Finance, or built-in simulated data), validated for gaps, splits, distributions and look-ahead |
-| Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance of reaching the target. **No target:** the highest expected return within the risk limit. Six other methods are available |
+| Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance (configurable) of reaching the target. **No target:** one of 7 methods; the default is the highest expected return within the risk limit. Always subject to the per-ETF and **per-category limits** |
 | Projection | 10,000-path Monte Carlo with contributions, rebalancing and optional taxes; conservative/base/optimistic scenarios; a deterministic future value |
 | Benchmark | The last 10 years against the S&P 500, with the same money invested |
 | Review | An independent reviewer runs about 60 checks at 4 checkpoints and stops the run on any blocking error |
@@ -56,6 +56,38 @@ TQQQ (leveraged), the four income ETFs (option strategies) and IBIT (bitcoin) ar
 
 ETFs younger than 20 years use all the history they have and are flagged. SGOV, SPYI, JEPQ,
 JEPI, QQQI and IBIT have only 2–6 years, so treat their estimates with caution.
+
+**Category limits** cap how much of the portfolio one category may take:
+
+| Category | Default limit |
+|---|---|
+| Crypto ETFs | 5 % |
+| Income ETFs | 25 % |
+| Commodity ETFs | 20 % |
+| Real Estate ETFs | 20 % |
+| All other categories | no limit (only the 50 % per-ETF limit) |
+
+A client can change any of these, in the questionnaire or in the profile file
+(`constraints.category_limits`). With short sales, the limit applies to the category's gross
+exposure. If the chosen ETFs can't add up to 100 % under the limits, the run stops and says
+so. The independent reviewer re-checks every limit.
+
+### How the portfolio is optimized
+
+| Client | Options |
+|---|---|
+| **Has a target** | The optimizer always finds the **lowest-risk** portfolio that reaches the target with the required probability (default 80 %). You choose the probability, and how risk is measured: **volatility** (default) or **tail risk** (CVaR: the average final value in the worst 5 % of simulated futures) |
+| **No target** | Choose one method (the questionnaire shows this menu). All of them stay within the risk limit and the position / category limits |
+
+| # | Method (`optimization_method`) | What it does |
+|---|---|---|
+| 1 | `mean_variance` (default) | Highest expected return within your risk limit; the classic approach |
+| 2 | `min_volatility` | Smallest ups and downs possible, whatever the return |
+| 3 | `max_sharpe` | Best return per unit of risk (Sharpe ratio) |
+| 4 | `cvar` | Smallest average loss in the worst 5 % of months (tail-risk focus) |
+| 5 | `target_return` | Smallest ups and downs that still earn a return you choose (set `target_return`, e.g. `0.06`) |
+| 6 | `risk_parity` | Every ETF contributes the same share of total risk (balanced, long-only) |
+| 7 | `max_diversification` | Most diversified mix: least overlap between the ETFs' movements (long-only) |
 
 The menu is defined in `robo_advisor/config/default.yaml`, and each fund's facts are in
 `robo_advisor/universe.py`.
@@ -133,9 +165,12 @@ The app asks, in order:
    answer. The investment-horizon question is answered automatically from the goal.
 4. **ETFs, category by category.** For each of the 9 categories, type the numbers of the ETFs
    to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
-5. Whether short sales are allowed, the maximum position size, and whether to include taxes
-   (and if so, the tax rates).
-6. For a client without a target, the optimization method (the default is fine).
+5. Whether short sales are allowed and the maximum position size. It then shows the
+   **category limits** that apply to the chosen ETFs, which you can keep (Enter) or change.
+6. Whether to include taxes, and if so, the tax rates.
+7. **How the portfolio is optimized** (see "How the portfolio is optimized" above):
+   - with a target: the required probability of reaching it, and how risk is measured;
+   - without a target: a numbered menu of all 7 methods (Enter picks the default).
 
 Results go to the folder given by `--out` (use one folder per client):
 
@@ -173,9 +208,9 @@ Create the `clients` folder first if it doesn't exist (`mkdir clients`).
 | `capacity_answers` | One answer code for each of the 9 capacity questions (from `./ra questionnaire`) |
 | `tolerance_answers` | One answer code for each of the 7 tolerance questions |
 | `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
-| `constraints` | `allow_short` (`true`/`false`), optional `max_position` (e.g. `0.3`), and `max_gross_leverage` when shorting |
+| `constraints` | `allow_short` (`true`/`false`); optional `max_position` (e.g. `0.3`); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
 | `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`) |
-| `preferences` (optional) | `optimization_method` (`mean_variance`, `min_volatility`, `max_sharpe`, `cvar`, `target_return` together with `target_return`, `risk_parity`, `max_diversification`), `target_probability` (e.g. `0.9`), `rebalancing_type` (`calendar` / `threshold`), `rebalancing_frequency` (`monthly` / `quarterly` / `annual`), `rebalancing_threshold` |
+| `preferences` (optional) | **No target:** `optimization_method`, one of the 7 methods above (with `target_return` for method 5). **Target:** `target_probability` (e.g. `0.9`) and `goal_risk_metric` (`volatility` / `cvar`). **Both:** `rebalancing_type` (`calendar` / `threshold`), `rebalancing_frequency` (`monthly` / `quarterly` / `annual`), `rebalancing_threshold` (e.g. `0.05`) |
 
 **B4. Run it:**
 ```
@@ -268,7 +303,8 @@ All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/
 - the ETF menu and its categories;
 - the questionnaire (questions, answer scores and weights);
 - the risk bands (score → volatility limit);
-- the target probability (80 %), the maximum position (50 %) and the leverage limit;
+- the target probability (80 %), the maximum position (50 %), the category limits and the
+  leverage limit;
 - the number of Monte Carlo paths and the rebalancing rule;
 - tax rates and scenario shifts;
 - data-validation limits, monitoring triggers and reviewer tolerances.
@@ -348,9 +384,9 @@ Client files contain personal financial data, so keep them out of the repository
 
 ## Limitations
 
-- **Estimates, not forecasts.** Expected returns and risks come from history. Mean-variance
-  optimization can concentrate in ETFs with short, strong histories (for example IBIT), and
-  allocations are capped per ETF (`max_position`), not per category.
+- **Estimates, not forecasts.** Expected returns and risks come from history. Optimizers
+  favour ETFs with short, strong histories (for example IBIT); the per-ETF and per-category
+  limits contain this, but the estimates remain uncertain.
 - **Estimated taxes.** The tax model is an estimate for a taxable account, not tax advice.
 - **Model assumptions.** Monte Carlo returns are log-normal (or bootstrapped), which
   understates extreme events.

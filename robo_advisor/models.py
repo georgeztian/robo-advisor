@@ -56,6 +56,16 @@ class Constraints(BaseModel):
     allow_short: bool = False
     max_position: float | None = Field(None, gt=0, le=1)       # None -> config default
     max_gross_leverage: float | None = Field(None, ge=1)       # None -> config default
+    # max share of the portfolio per ETF category, e.g. {"Crypto ETFs": 0.05}; overrides the
+    # config defaults for the categories given (1.0 removes a limit)
+    category_limits: dict[str, float] | None = None
+
+    @model_validator(mode="after")
+    def _limits_in_range(self):
+        for cat, lim in (self.category_limits or {}).items():
+            if not 0 < lim <= 1:
+                raise ValueError(f"category limit for {cat!r} must be in (0, 1], got {lim}")
+        return self
 
 
 class TaxInput(BaseModel):
@@ -117,12 +127,20 @@ class RiskAssessment:
 
 
 @dataclass
+class CategoryCap:
+    category: str
+    limit: float                        # max sum of |w_i| over the category's selected ETFs
+    tickers: list[str]
+
+
+@dataclass
 class ResolvedConstraints:
     tickers: list[str]
     allow_short: bool
     max_position: float
     max_gross_leverage: float           # 1.0 when long-only
     max_volatility: float
+    category_caps: list[CategoryCap] = field(default_factory=list)
 
 
 @dataclass
