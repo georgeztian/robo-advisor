@@ -46,10 +46,12 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
     held = [(t, r) for t, r in table.iterrows() if abs(r["Weight"]) > 1e-6]
     unheld = [(t, r) for t, r in table.iterrows() if abs(r["Weight"]) <= 1e-6]
     held.sort(key=lambda x: -abs(x[1]["Weight"]))
+    cap_by_cat = {c.category: c.limit for c in port.constraints.category_caps}
     category_rows = []
     for cat, grp in table[table["Weight"].abs() > 1e-6].groupby("Category", sort=False):
         category_rows.append({"name": cat, "tickers": ", ".join(grp.index), "weight": float(grp["Weight"].sum()),
-                              "initial": float(grp["Initial"].sum()), "monthly": float(grp["Monthly"].sum())})
+                              "initial": float(grp["Initial"].sum()), "monthly": float(grp["Monthly"].sum()),
+                              "limit": cap_by_cat.get(cat)})
     category_rows.sort(key=lambda c: -abs(c["weight"]))
 
     alloc = charts.bar_chart_h([t for t, _ in held], [r["Weight"] for _, r in held], charts.pct,

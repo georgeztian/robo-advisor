@@ -4,6 +4,7 @@ Long-only:   0 <= w_i <= max_position,  sum w_i = 1
 Short sales: w = p - q with p, q >= 0 (variable split), so gross exposure is linear:
              sum (p_i + q_i) <= L,  p_i, q_i <= max_position (=> |w_i| <= max_position),
              sum (p_i - q_i) = 1
+Categories:  sum over a category's ETFs of |w_i| <= category limit  (linear: p_i + q_i with shorts)
 Risk limit:  w' Sigma w <= sigma_max^2
 """
 from __future__ import annotations
@@ -44,11 +45,34 @@ class Space:
     def bounds(self) -> list[tuple[float, float]]:
         return [(0.0, self.rc.max_position)] * self.dim
 
+    def cap_groups(self) -> list[tuple[str, float, np.ndarray]]:
+        """(category, limit, 0/1 membership vector over the n ETFs) for each category limit."""
+        idx = {t: i for i, t in enumerate(self.rc.tickers)}
+        out = []
+        for cap in self.rc.category_caps:
+            m = np.zeros(self.n)
+            m[[idx[t] for t in cap.tickers]] = 1.0
+            out.append((cap.category, cap.limit, m))
+        return out
+
     def check_feasible(self) -> None:
         if self.n * self.rc.max_position < 1 - 1e-12:
             raise InfeasibleError(
                 f"{self.n} ETF(s) with max position {self.rc.max_position:.0%} cannot sum to 100%; "
                 "select more ETFs or raise the position limit")
+        # largest long-only total the position and category limits allow
+        capped = np.zeros(self.n, bool)
+        room = 0.0
+        for _, lim, m in self.cap_groups():
+            room += min(lim, m.sum() * self.rc.max_position)
+            capped |= m > 0
+        room += (~capped).sum() * self.rc.max_position
+        if room < 1 - 1e-9:
+            limits = ", ".join(f"{c.category} {c.limit:.0%}" for c in self.rc.category_caps)
+            raise InfeasibleError(
+                f"the selected ETFs can only reach {room:.0%} of the portfolio under the category limits "
+                f"({limits}) and the {self.rc.max_position:.0%} position limit; select ETFs from more "
+                "categories or raise the limits")
 
     def linear_constraints(self) -> list[dict]:
         cons = [{"type": "eq", "fun": lambda x: self.to_w(x).sum() - 1.0,
@@ -57,6 +81,10 @@ class Space:
             L = self.rc.max_gross_leverage
             cons.append({"type": "ineq", "fun": lambda x: L - x.sum(),
                          "jac": lambda x: -np.ones(self.dim)})
+        for _, lim, m in self.cap_groups():
+            g = np.concatenate([m, m]) if self.short else m      # gross exposure in the category
+            cons.append({"type": "ineq", "fun": lambda x, g=g, lim=lim: lim - g @ x,
+                         "jac": lambda x, g=g: -g})
         return cons
 
     def vol_constraint(self, cov: np.ndarray, sigma_max: float) -> dict:
@@ -90,4 +118,4 @@ class Space:
             return False
         if cov is not None and sigma_max is not None and np.sqrt(max(w @ cov @ w, 0)) > sigma_max + tol:
             return False
-        return True
+        return all(m @ np.abs(w) <= lim + tol for _, lim, m in self.cap_groups())

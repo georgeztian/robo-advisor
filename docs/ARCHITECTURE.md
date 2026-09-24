@@ -73,7 +73,7 @@ Execution waves (nodes within a wave run concurrently):
 | data_validation | §3 | Inception, 20-year coverage, gaps, split/distribution-consistent adjusted prices, expense ratios |
 | estimation | §6 | μ from monthly total returns; σ and Σ from daily returns (pairwise, PSD-repaired); VaR, CVaR, MDD, β, Sharpe, Sortino |
 | tax_adjust | §5 | After-tax return series (interest / qualified / REIT / collectibles), gain-realization drag |
-| constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; \|wᵢ\| ≤ max position; σ ≤ σ_max from the mapped profile |
+| constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; \|wᵢ\| ≤ max position; Σ\|wᵢ\| per category ≤ category limit (config defaults + client overrides); σ ≤ σ_max from the mapped profile |
 | optimizer | §7–§9 | Case A: min risk s.t. P(F_T ≥ F\*) ≥ p. Case B: max E[R] s.t. σ ≤ σ_max, or an alternative method |
 | simulation | §12 | 10,000-path Monte Carlo with contributions, rebalancing and taxes |
 | scenarios | §13 | Conservative / base / optimistic |
@@ -106,7 +106,7 @@ with evidence. The rule families:
 |---|---|
 | data | R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, blocking validation findings, independent adjusted-price consistency, expense ratios) |
 | inputs | R-RISK (scores, min-mapping, band), R-EST (coverage, μ, σ, PSD Σ), R-TAX, R-CON |
-| portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
+| portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, category limits (R-PORT-15), σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
 | final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held leveraged / option-income / crypto ETFs) |
 
 When remediation fixes a gate, only the **latest** report of each stage decides the verdict.
@@ -165,6 +165,11 @@ taxes, missing disclosures and a misreported probability.
   the minimum-volatility portfolio just far enough to satisfy it. The blend stays inside the
   convex feasible set, so every other constraint still holds.
 * **Shorts.** The variable split w = p − q keeps the gross-exposure constraint linear.
+* **Category limits.** Linear constraints (on p + q with shorts) are added to every method's
+  formulation: the SLSQP constraints, rows of the CVaR linear program, and the long-only risk
+  parity / max-diversification problems. A feasibility pre-check stops the run with an
+  explanation when the chosen ETFs can't reach 100 % under the limits. The reviewer derives
+  the expected limits independently and applies them in its own re-solve.
 * **Monte Carlo.** Monthly returns are multivariate log-normal, moment-matched *exactly* to
   μ/12 and Σ/12; an iid bootstrap of history is also available. When taxes are on, the engine
   tracks average-cost basis, the ST/LT split by dollar-weighted holding age, loss netting,
@@ -184,7 +189,6 @@ taxes, missing disclosures and a misreported probability.
   - The bootstrap resamples only months in which every selected ETF has data.
   - Selling to pay taxes does not itself realize gains.
   - The reviewer's tax check is a lower bound (distribution taxes), not a full ledger recomputation.
-  - Allocations are limited per ETF (`max_position`), not per category. Mean-variance
-    optimization follows historical estimates, so ETFs with short, strong histories (e.g.
-    IBIT, about 2–3 years) can receive large weights. They are disclosed in the report, but
-    the estimates are highly uncertain.
+  - Optimizers follow historical estimates, so ETFs with short, strong histories (e.g. IBIT,
+    about 2–3 years) are favoured. The per-ETF and per-category limits contain this, and the
+    report discloses the risks, but the estimates remain highly uncertain.

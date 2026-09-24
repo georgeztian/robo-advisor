@@ -84,3 +84,27 @@ def test_goal_search_reports_unreachable_target():
                       RebalancingCfg(), TaxRates.disabled(5), 500, 5, 6, 0.01)
     assert res.diagnostics["infeasible"] and res.diagnostics["required_monthly_contribution"] > 1000
     assert any("No portfolio" in n for n in res.notes)
+
+
+def cats_rc(short=False, limits=((("A", "B"), 0.30), (("E",), 0.10))):
+    from robo_advisor.models import CategoryCap
+    caps = [CategoryCap(f"cat{i}", lim, list(ts)) for i, (ts, lim) in enumerate(limits)]
+    return ResolvedConstraints(T, short, 0.5, 1.5 if short else 1.0, 0.12, caps)
+
+
+@pytest.mark.parametrize("short", [False, True])
+@pytest.mark.parametrize("method", [m for m in METHODS if m != "target_return"] + ["target_return"])
+def test_every_method_respects_category_limits(method, short):
+    o = Optimizer(MU, COV, cats_rc(short), 0.02, SCEN)
+    w = o.run(method, target=0.05).weights
+    assert abs(w[0]) + abs(w[1]) <= 0.30 + 1e-6          # category of A, B (the two equity-like assets)
+    assert abs(w[4]) <= 0.10 + 1e-6
+    assert w.sum() == pytest.approx(1, abs=1e-6)
+
+
+def test_category_limits_bind_and_infeasible_limits_are_explained():
+    free = Optimizer(MU, COV, rc(cap=0.12), 0.02).run("mean_variance").weights
+    capped = Optimizer(MU, COV, cats_rc(), 0.02).run("mean_variance").weights
+    assert free[0] + free[1] > 0.30 and capped[0] + capped[1] == pytest.approx(0.30, abs=1e-5)
+    with pytest.raises(InfeasibleError, match="category limits"):
+        Optimizer(MU, COV, cats_rc(limits=((("A", "B", "C"), 0.2), (("D", "E"), 0.2))), 0.02)

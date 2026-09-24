@@ -37,6 +37,21 @@ class Reviewer:
         self.cfg = settings.review
 
     # ------------------------------------------------------------------ helpers
+    def _expected_caps(self, req) -> dict[str, tuple[float, list[str]]]:
+        """Category limits that must apply: config defaults overridden by the client's profile."""
+        limits = dict(self.s.optimization.category_limits)
+        limits.update(req.client.constraints.category_limits or {})
+        out = {}
+        for cat, members in self.s.universe.categories.items():
+            held = [t for t in req.tickers if t in members]
+            if held and limits.get(cat, 1.0) < 1.0:
+                out[cat] = (limits[cat], held)
+        return out
+
+    def _groups(self, req) -> list[tuple[np.ndarray, float]]:
+        return [(np.array([1.0 if t in held else 0.0 for t in req.tickers]), lim)
+                for lim, held in self._expected_caps(req).values()]
+
     def _income_rate(self, t: str) -> float:
         """Distribution tax rate from the catalog's income character (independent of tax.py)."""
         tc, ti = self.s.tax, self._tax_in
@@ -161,11 +176,14 @@ class Reviewer:
         c = req.client.constraints
         exp_pos = c.max_position if c.max_position is not None else self.s.optimization.max_position
         exp_L = (c.max_gross_leverage if c.max_gross_leverage is not None else self.s.optimization.max_gross_leverage) if c.allow_short else 1.0
+        caps = {cc.category: (cc.limit, sorted(cc.tickers)) for cc in rc.category_caps}
+        exp_caps = {k: (v[0], sorted(v[1])) for k, v in self._expected_caps(req).items()}
         f(out, "R-CON-01", "§4/§8", "BLOCKER",
           rc.max_volatility == risk.max_volatility and rc.allow_short == c.allow_short
-          and rc.max_position == exp_pos and rc.max_gross_leverage == exp_L,
+          and rc.max_position == exp_pos and rc.max_gross_leverage == exp_L and caps == exp_caps,
           f"constraints: max vol {rc.max_volatility:.0%} (from mapped profile), short={rc.allow_short}, "
-          f"max position {rc.max_position:.0%}, gross <= {rc.max_gross_leverage:.2f}")
+          f"max position {rc.max_position:.0%}, gross <= {rc.max_gross_leverage:.2f}, category limits "
+          + (", ".join(f"{k} {v[0]:.0%}" for k, v in exp_caps.items()) or "none"))
         return ReviewReport("inputs", out)
 
     # ------------------------------------------------------------------ stage: portfolio
@@ -185,6 +203,15 @@ class Reviewer:
               f"gross exposure {np.abs(w).sum():.4f} <= L = {rc.max_gross_leverage:.2f}")
         f(out, "R-PORT-03", "§4", "BLOCKER", np.abs(w).max() <= rc.max_position + tol,
           f"largest position {np.abs(w).max():.2%} <= max position {rc.max_position:.0%}")
+        exp_caps = self._expected_caps(req)
+        if exp_caps:
+            used = {cat: float(sum(abs(w[req.tickers.index(t)]) for t in held))
+                    for cat, (lim, held) in exp_caps.items()}
+            over = {cat: round(used[cat], 4) for cat, (lim, _) in exp_caps.items() if used[cat] > lim + tol}
+            f(out, "R-PORT-15", "config", "BLOCKER", not over,
+              "category limits respected: " + ", ".join(f"{c} {used[c]:.1%} <= {lim:.0%}"
+                                                        for c, (lim, _) in exp_caps.items())
+              if not over else f"category limits exceeded: {over}")
         vol = float(np.sqrt(w @ est.cov @ w))
         f(out, "R-PORT-06", "§2C/§7/§8", "BLOCKER", vol <= rc.max_volatility + tol,
           f"portfolio volatility {vol:.2%} <= limit {rc.max_volatility:.0%} of the mapped risk profile")
@@ -227,6 +254,7 @@ class Reviewer:
         w = np.asarray(port.weights, float)
         mu_l = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
         args = (mu_l, est.mu, est.cov, rc.allow_short, rc.max_position, rc.max_gross_leverage, rc.max_volatility)
+        groups = self._groups(req)
         vol = float(np.sqrt(w @ est.cov @ w))
         if not req.has_target:
             kind = {"mean_variance": "max_return", "min_volatility": "min_vol", "max_sharpe": "max_sharpe"}.get(port.method)
@@ -234,7 +262,7 @@ class Reviewer:
                 f(out, "R-PORT-09", "§8/§9", "INFO", True,
                   f"{port.method}: no independent re-solve (constraint and risk-limit rules still apply)")
                 return out
-            _, best = ind.resolve(kind, *args, rf=est.risk_free)
+            _, best = ind.resolve(kind, *args, rf=est.risk_free, groups=groups)
             if kind == "max_return":
                 val, tol, ok_fn, unit = port.expected_return, self.cfg.optimality_tol, lambda b, v, t: v >= b - t, "return"
             elif kind == "max_sharpe":
@@ -254,13 +282,13 @@ class Reviewer:
         rb = req.rebalancing
         every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
         thr = rb.threshold if rb.type == "threshold" else None
-        w_mv, v_mv = ind.resolve("min_vol", *args)
+        w_mv, v_mv = ind.resolve("min_vol", *args, groups=groups)
         r_mv = float(np.clip(w_mv, 0, None) @ mu_l - np.clip(-w_mv, 0, None) @ est.mu)
         n, p, z = self.cfg.mc_paths, req.target_probability, self.cfg.mc_z
         se = np.sqrt(p * (1 - p) / n)
         offenders = []
         for r in np.linspace(r_mv, port.expected_return, 6)[:-1]:
-            wc, vc = (w_mv, v_mv) if r <= r_mv + 1e-12 else ind.resolve("min_vol", *args, min_return=r)
+            wc, vc = (w_mv, v_mv) if r <= r_mv + 1e-12 else ind.resolve("min_vol", *args, min_return=r, groups=groups)
             if wc is None or vc > 0.9 * vol:
                 continue
             # with taxes on, drift at the after-tax return (the engine taxes each path explicitly)
