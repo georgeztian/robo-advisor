@@ -13,7 +13,7 @@ Commands are shown for both systems:
 
 ---
 
-## Part 1: One-time installation (about 15 minutes)
+## Part 1: Installation (about 15 minutes, mostly automatic)
 
 ### Step 1: Install Python
 1. Download Python 3 (version 3.10 or newer) from https://www.python.org/downloads/ and run
@@ -36,23 +36,29 @@ If the repository is private, Git will ask you to sign in to GitHub.
 Without Git, you can instead open the repository page, click **Code → Download ZIP**, unzip
 it into *Documents*, and `cd` into the unzipped folder.
 
-### Step 4: Run the setup script
-| Mac / Linux | Windows |
-|---|---|
-| `./setup.sh` | `.\setup.bat` |
+### Step 4: Nothing to install by hand
+The first time you use the `ra` launcher (Step 5), it sets itself up automatically. It:
 
-The setup script does four things:
+1. **finds Python** 3.10 or newer on your computer, and tells you what to install if there
+   isn't one;
+2. **creates a private Python environment** in a hidden `.venv` folder inside the project,
+   which keeps the app's libraries separate from everything else on your computer (deleting
+   the folder removes them completely);
+3. **installs the app** and its libraries into that environment: numerical libraries, Yahoo
+   Finance support and test tools. This takes a few minutes, once;
+4. **checks** that the app starts.
 
-1. **Finds Python** 3.10 or newer on your computer. If it can't, it tells you what to install.
-2. **Creates a private Python environment** in a hidden `.venv` folder inside the project.
-   This keeps the app's libraries separate from anything else on your computer; deleting the
-   folder removes them completely.
-3. **Installs the app** and its libraries into that environment: the numerical libraries,
-   Yahoo Finance support and the test tools.
-4. **Checks** that the app starts.
+After that, every `ra` command checks the environment first:
 
-You never need to "activate" the environment. The `ra` launcher always uses it, and if
-`.venv` is missing it runs the setup for you.
+- If the environment is missing or damaged, `ra` reinstalls it.
+- If the app's dependency list (`pyproject.toml`) changed since the last install, for example
+  after a `git pull`, `ra` updates it automatically.
+- Otherwise it starts right away.
+
+You never need to "activate" anything.
+
+If you prefer to install up front, run `./setup.sh` (Windows: `.\setup.bat`). Add `--fresh`
+to rebuild the environment from scratch.
 
 To confirm everything works (optional, about 1 minute):
 
@@ -67,6 +73,8 @@ The expected result is `92 passed`.
 ## Part 2: First run on demo data (no internet needed)
 
 ### Step 5: Run the example client
+The very first `ra` command also performs the automatic installation from Step 4.
+
 | Mac / Linux | Windows |
 |---|---|
 | `./ra run --profile examples/client_target.json` | `.\ra run --profile examples\client_target.json` |
@@ -180,7 +188,8 @@ Then use `./ra …` (Mac/Linux) or `.\ra …` (Windows). No activation is needed
 ```
 git pull
 ```
-Then re-run the setup script (Step 4), which updates the installed app in place.
+That's all. The next `ra` command notices if the dependencies changed and updates the
+environment by itself.
 
 ### Optional: change the rules
 All thresholds live in `robo_advisor/config/default.yaml`: risk bands, the 80% target

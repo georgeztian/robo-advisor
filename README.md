@@ -33,15 +33,14 @@ the spec. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 New to Python? Follow the step-by-step guide in [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
 
-**1. One-time setup.** The setup script creates a private Python environment in `.venv` and
-installs the app into it, with Yahoo Finance support and the test tools:
+Everything runs through the `ra` launcher (Windows: `.\ra`). Installation is automatic:
+- On the first run, `ra` creates a private Python environment in `.venv` and installs the app
+  into it, with Yahoo Finance support and the test tools.
+- On every later run it checks that environment. It reinstalls if the environment is damaged,
+  and updates it if the dependency list in `pyproject.toml` changed (e.g. after `git pull`).
 
-```bash
-./setup.sh              # Windows: .\setup.bat     (--fresh rebuilds the environment)
-```
-
-**2. Run it through the `ra` launcher.** It always uses `.venv`, so there's nothing to
-activate, and it runs the setup first if `.venv` is missing:
+There is nothing to activate. `./setup.sh` / `.\setup.bat` installs up front if you prefer,
+and `--fresh` rebuilds the environment from scratch.
 
 ```bash
 ./ra run --profile examples/client_target.json --timeline      # Windows: .\ra ...
