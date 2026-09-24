@@ -232,7 +232,7 @@ as an `INPUT PROBLEM` naming the field.
 `--as-of today` analyses with data up to today. You can give a past date instead, e.g.
 `--as-of 2026-06-30`.
 
-The profile saved by Route A (`clients/client_name/client_name_profile.json`) works the same way:
+The profile saved by Route A (`clients/client_name/client_code_profile.json`) works the same way:
 edit it and re-run with `--profile`.
 
 ### Step 6: Read the report
