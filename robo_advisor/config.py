@@ -207,9 +207,9 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 def load_settings(path: str | Path | None = None, overrides: dict[str, Any] | None = None) -> Settings:
     """Load the default YAML, deep-merge an optional user YAML file and dict overrides."""
-    raw = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text())
+    raw = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
     if path:
-        raw = _deep_merge(raw, yaml.safe_load(Path(path).read_text()) or {})
+        raw = _deep_merge(raw, yaml.safe_load(Path(path).read_text(encoding="utf-8-sig")) or {})
     if overrides:
         raw = _deep_merge(raw, overrides)
     return Settings.model_validate(raw)

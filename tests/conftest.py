@@ -32,7 +32,7 @@ def provider():
 
 
 def load_client(name: str, **update) -> ClientInput:
-    data = json.loads((ROOT / "examples" / name).read_text())
+    data = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
     for k, v in update.items():
         data[k] = v
     return ClientInput.model_validate(data)
