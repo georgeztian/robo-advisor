@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from conftest import load_client
+from conftest import FIXTURES, load_client
 from robo_advisor.agents.advisory import build_advisory_graph
 from robo_advisor.agents.monitor import build_monitoring_graph
 from robo_advisor.cli import main
@@ -68,7 +68,8 @@ def test_cli_run_and_graph(tmp_path, capsys):
     cfg.write_text("simulation: {n_paths: 1500}\nscenarios: {n_paths: 500}\n"
                    "optimization: {goal: {search_paths: 500, frontier_points: 8}}\nreview: {mc_paths: 1500}\n",
                    encoding="utf-8")
-    rc = main(["run", "--profile", "examples/client_target.json", "--out", str(tmp_path), "--config", str(cfg)])
+    rc = main(["run", "--profile", str(FIXTURES / "client_target.json"), "--out", str(tmp_path), "--config", str(cfg),
+               "--provider", "synthetic"])
     assert rc == 0
     assert (tmp_path / "alex_target_report.html").exists()
     audit = json.loads((tmp_path / "alex_target_audit.json").read_text(encoding="utf-8"))
@@ -88,12 +89,12 @@ def test_cli_never_relies_on_platform_default_encoding(tmp_path):
                    encoding="utf-8")
     strict = [sys.executable, "-X", "warn_default_encoding", "-W", "error::EncodingWarning", "-m", "robo_advisor"]
     out = tmp_path / "out"
-    run = subprocess.run(strict + ["run", "--profile", "examples/client_target.json", "--out", str(out),
+    run = subprocess.run(strict + ["run", "--provider", "synthetic", "--profile", str(FIXTURES / "client_target.json"), "--out", str(out),
                                    "--config", str(cfg)], capture_output=True, text=True, encoding="utf-8")
     assert run.returncode == 0, run.stderr[-2000:]
     html = (out / "alex_target_report.html").read_text(encoding="utf-8")
     assert "⚠" in html                                   # the non-ASCII banner that crashed on Windows
-    mon = subprocess.run(strict + ["monitor", "--prior", str(out / "alex_target_audit.json"), "--config", str(cfg)],
+    mon = subprocess.run(strict + ["monitor", "--provider", "synthetic", "--prior", str(out / "alex_target_audit.json"), "--config", str(cfg)],
                          capture_output=True, text=True, encoding="utf-8")
     assert mon.returncode in (0, 1), mon.stderr[-2000:]      # 1 = review triggers found
 
@@ -101,6 +102,26 @@ def test_cli_never_relies_on_platform_default_encoding(tmp_path):
 def test_profiles_saved_with_bom_are_accepted(tmp_path):
     from robo_advisor.cli import _read
     p = tmp_path / "profile.json"
-    with open("examples/client_target.json", "rb") as fh:
+    with open(str(FIXTURES / "client_target.json"), "rb") as fh:
         p.write_bytes(b"\xef\xbb\xbf" + fh.read())            # Notepad-style UTF-8 with BOM
     assert _read(p).startswith("{")
+
+
+def test_readme_profile_skeleton_matches_the_app():
+    """The README's Route B skeleton must stay in sync with the questionnaire and the model."""
+    import re
+
+    from pydantic import ValidationError
+
+    from conftest import ROOT
+    from robo_advisor.config import load_settings
+    from robo_advisor.models import ClientInput
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    skeleton = json.loads(re.search(r"```json\n(.*?)```", readme, re.S).group(1))
+    s = load_settings()
+    assert set(skeleton["capacity_answers"]) == {q.id for q in s.questionnaire.capacity if not q.derive_from_goal}
+    assert set(skeleton["tolerance_answers"]) == {q.id for q in s.questionnaire.tolerance}
+    assert set(skeleton) <= set(ClientInput.model_fields)
+    with pytest.raises(ValidationError, match="target_amount"):   # unfilled placeholders are rejected
+        ClientInput.model_validate(skeleton)

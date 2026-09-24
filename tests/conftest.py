@@ -10,6 +10,7 @@ from robo_advisor.data.providers import SyntheticProvider
 from robo_advisor.models import ClientInput
 
 ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures"          # test client profiles
 AS_OF = dt.date(2026, 9, 23)
 
 # smaller Monte Carlo / search sizes keep the suite fast; logic is identical
@@ -32,8 +33,8 @@ def provider():
 
 
 def load_client(name: str, **update) -> ClientInput:
-    data = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
-    data["as_of"] = AS_OF.isoformat()        # example profiles carry no date; tests pin one
+    data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    data["as_of"] = AS_OF.isoformat()        # fixture profiles carry no date; tests pin one
     for k, v in update.items():
         data[k] = v
     return ClientInput.model_validate(data)

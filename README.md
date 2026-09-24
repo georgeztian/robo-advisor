@@ -28,7 +28,7 @@ a report is produced.
 |---|---|
 | Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 7 risk-tolerance questions, ETF choice by category, short-selling / position / tax preferences |
 | Risk profile | Capacity and tolerance scores (0–100) are kept separate. **Mapped score = min(capacity, tolerance)**, which maps to a volatility limit (5 %–25 %, configurable) |
-| Market data | Up to 20 years of daily prices (real data from Yahoo Finance, or built-in simulated data), validated for gaps, splits, distributions and look-ahead |
+| Market data | Up to 20 years of real daily prices from Yahoo Finance, validated for gaps, splits, distributions and look-ahead |
 | Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance (configurable) of reaching the target. **No target:** one of 7 methods; the default is the highest expected return within the risk limit. Always subject to the per-ETF and **per-category limits** |
 | Projection | 10,000-path Monte Carlo with contributions, rebalancing and optional taxes; conservative/base/optimistic scenarios; a deterministic future value |
 | Benchmark | The last 10 years against the S&P 500, with the same money invested |
@@ -121,7 +121,7 @@ into the unzipped folder.
 ### Step 3: First run (installation is automatic)
 | Mac / Linux | Windows |
 |---|---|
-| `./ra run --profile examples/client_target.json` | `.\ra run --profile examples\client_target.json` |
+| `./ra etfs` | `.\ra etfs` |
 
 You never install anything by hand and never "activate" anything. Every `ra` command first
 checks the app's private Python environment (the `.venv` folder):
@@ -132,29 +132,25 @@ checks the app's private Python environment (the `.venv` folder):
   reinstalls or updates it.
 - **Up to date:** it starts right away.
 
-This first run uses **simulated** prices, and the report is marked SYNTHETIC. It only shows
-that everything works. Open the report:
+This first command then prints the ETF menu. Seeing the menu means the installation worked.
 
-| Mac | Windows |
-|---|---|
-| `open out/alex_target_report.html` | `start out\alex_target_report.html` |
-
-### Step 4: Download and check real market data
+### Step 4: Download and check the market data
 ```
-./ra data --provider yahoo
+./ra data
 ```
-This downloads about 20 years of daily prices for all 25 ETFs, plus VOO (the S&P 500
-benchmark) and BIL (the T-bill risk-free proxy). It then validates them and prints a table
-ending in `Data OK.`
+This downloads about 20 years of real daily prices from Yahoo Finance for all 25 ETFs, plus
+VOO (the S&P 500 benchmark) and BIL (the T-bill risk-free proxy). It then validates them and
+prints a table ending in `Data OK.`
 
 The prices are cached in `.cache/prices/`, so later runs are fast and work offline. Re-run
-this command whenever you want to check the data.
+this command whenever you want to check the data. Every analysis also refreshes the cache
+automatically when it is out of date.
 
 ### Step 5: Enter a client's answers: choose **one** of the two routes
 
 #### Route A: Answer the questions on the command line (easiest)
 ```
-./ra run --interactive --provider yahoo --out clients/jane
+./ra run --interactive --out clients/jane
 ```
 The app asks, in order:
 
@@ -181,14 +177,42 @@ Results go to the folder given by `--out` (use one folder per client):
 | `jane_doe_audit.json` | The full audit trail; needed for later check-ins (Step 8) |
 
 #### Route B: Fill out a profile file
-**B1. Copy a template:**
+**B1. Create the file**, for example `clients/john.json`. Create the `clients` folder first
+if it doesn't exist (`mkdir clients`). Either:
 
-| Client has... | Mac / Linux | Windows |
-|---|---|---|
-| a target amount by a date | `cp examples/client_target.json clients/john.json` | `copy examples\client_target.json clients\john.json` |
-| no specific target | `cp examples/client_no_target.json clients/john.json` | `copy examples\client_no_target.json clients\john.json` |
+- copy a profile saved by Route A (`…_profile.json`) and change it, or
+- paste this skeleton into a new file and replace every `<…>` placeholder:
 
-Create the `clients` folder first if it doesn't exist (`mkdir clients`).
+```json
+{
+  "profile": {"name": "<client name>"},
+  "goal": {
+    "has_target": true,
+    "target_amount": "<amount, e.g. 500000>",
+    "target_date": "<YYYY-MM-DD>",
+    "initial_investment": "<amount>",
+    "monthly_contribution": "<amount>"
+  },
+  "capacity_answers": {
+    "annual_income": "<code>", "liquid_assets": "<code>", "investable_assets": "<code>",
+    "emergency_savings": "<code>", "debt_obligations": "<code>", "income_stability": "<code>",
+    "large_expenditures": "<code>", "portfolio_dependence": "<code>", "continue_investing": "<code>"
+  },
+  "tolerance_answers": {
+    "decline_reaction": "<code>", "temporary_losses": "<code>", "stable_vs_volatile": "<code>",
+    "equity_comfort": "<code>", "experience": "<code>", "crash_behavior": "<code>",
+    "preserve_vs_growth": "<code>"
+  },
+  "universe": ["<category name or ticker>", "<category name or ticker>"],
+  "constraints": {"allow_short": false},
+  "taxes": {"enabled": false},
+  "preferences": {}
+}
+```
+Numbers are written without quotes, `$` or commas (e.g. `"initial_investment": 150000`). For
+a client **without a target**, set `"has_target": false`, delete `target_amount` and
+`target_date`, and add `"horizon_years": <years>`. A placeholder left in place is reported
+as an `INPUT PROBLEM` naming the field.
 
 **B2. Look up the allowed answers and ETF names:**
 ```
@@ -214,7 +238,7 @@ Create the `clients` folder first if it doesn't exist (`mkdir clients`).
 
 **B4. Run it:**
 ```
-./ra run --profile clients/john.json --provider yahoo --as-of today --out clients/john
+./ra run --profile clients/john.json --as-of today --out clients/john
 ```
 `--as-of today` analyses with data up to today. You can give a past date instead, e.g.
 `--as-of 2026-06-30`.
@@ -223,7 +247,13 @@ The profile saved by Route A (`clients/jane/jane_doe_profile.json`) works the sa
 edit it and re-run with `--profile`.
 
 ### Step 6: Read the report
-Open `…_report.html` in the client's folder (see Step 3 for how). From top to bottom:
+Open the report in your browser:
+
+| Mac | Windows |
+|---|---|
+| `open clients/jane/jane_doe_report.html` | `start clients\jane\jane_doe_report.html` |
+
+From top to bottom:
 
 - **Key figures:** the probability of reaching the target, the median projected value,
   expected return and volatility.
@@ -250,7 +280,7 @@ command. Each run overwrites that client's report and audit.
    value**. Update anything else that changed.
 2. Run:
    ```
-   ./ra monitor --prior clients/jane/jane_doe_audit.json --profile clients/jane/jane_updated.json --provider yahoo
+   ./ra monitor --prior clients/jane/jane_doe_audit.json --profile clients/jane/jane_updated.json
    ```
 3. It reports the performance since the last recommendation, and any **review triggers**:
    goal changed, contribution changed, target at risk, risk limit exceeded, market risk
@@ -281,7 +311,7 @@ Common options:
 
 | Option | Meaning |
 |---|---|
-| `--provider synthetic\|yahoo\|csv` | Data source. The default is `synthetic` (offline demo data) |
+| `--provider yahoo\|csv\|synthetic` | Data source. The default is `yahoo` (real prices); `synthetic` is simulated data for offline testing |
 | `--as-of YYYY-MM-DD\|today` | Analysis date; data after it is never used |
 | `--out FOLDER` | Where the report, audit and profile are written (default `out`) |
 | `--risk-free etf\|fred` | Risk-free rate from the BIL ETF (default) or the FRED 3-month T-bill rate |
@@ -326,9 +356,9 @@ optimization:
 
 | Provider | Use |
 |---|---|
-| `synthetic` (default) | Deterministic simulated histories, calibrated to each ETF's real inception date and typical behaviour. For demos and tests; reports are watermarked **SYNTHETIC** |
-| `yahoo` | Real daily prices via `yfinance` |
+| `yahoo` (default) | Real daily prices via `yfinance` |
 | `csv` | Your own files: `data/prices/<TICKER>.csv` with columns `date, close, adj_close[, dividend, split_ratio]` |
+| `synthetic` | Simulated histories calibrated to each ETF, for offline testing only. Reports built on them are watermarked **SYNTHETIC** |
 
 How Yahoo data is handled:
 
@@ -348,7 +378,6 @@ How Yahoo data is handled:
 ```
 ra, ra.bat                 launcher: runs the app inside .venv, installing/updating it automatically
 setup.sh, setup.bat        the installer that ra calls (can also be run directly; --fresh rebuilds)
-examples/                  profile templates (with and without a target)
 robo_advisor/
   config/default.yaml      all settings, including the ETF menu and the questionnaire
   universe.py              ETF facts: inception, fees, tax character, special risks
@@ -362,12 +391,13 @@ robo_advisor/
   agents/                  the agents and the advisory / monitoring graphs
   review/                  the independent reviewer (its own code, no production imports)
   cli.py                   the commands above
-tests/                     automated tests (./ra test)
+tests/                     automated tests (./ra test); tests/fixtures/ holds two test client profiles
 tools/extract_docx.py      extracts the .docx specification, including Word equations
 docs/                      SPEC.md (the extracted specification), ARCHITECTURE.md
 ```
 
-Client folders (`clients/`), outputs (`out/`), the data cache and `.venv` are ignored by Git.
+Client folders (`clients/`), the default output folder (`out/`), the data cache and `.venv`
+are ignored by Git.
 Client files contain personal financial data, so keep them out of the repository.
 
 ## Troubleshooting
@@ -380,7 +410,7 @@ Client files contain personal financial data, so keep them out of the repository
 | `MARKET DATA UNAVAILABLE` | Yahoo couldn't be reached. Check your internet, VPN or firewall, wait a minute (rate limit) and retry |
 | `WORKFLOW HALTED at review_…` | The reviewer found a real problem. The message names the rule. A common one is that no mix of the chosen ETFs meets the client's risk limit; add lower-risk ETFs such as Bond or Risk-free Treasury ETFs |
 | The environment seems broken | `./setup.sh --fresh` (Windows: `.\setup.bat --fresh`) |
-| Odd data warnings | Delete `.cache` and re-run `./ra data --provider yahoo` |
+| Odd data warnings | Delete `.cache` and re-run `./ra data` |
 
 ## Limitations
 

@@ -44,7 +44,7 @@ rem 4. smoke check, then record which dependency list was installed (ra compares
 ".venv\Scripts\python.exe" -c "import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest())" pyproject.toml > ".venv\.install-stamp" || exit /b 1
 echo.
 echo Setup complete. The environment is used automatically by ra.bat - no activation needed:
-echo   .\ra run --profile examples\client_target.json
-echo   .\ra data --provider yahoo
-echo   .\ra run --profile examples\client_target.json --provider yahoo --as-of today
+echo   .\ra data
+echo   .\ra run --interactive --out clients\^<name^>
+echo   .\ra run --profile clients\^<name^>\^<name^>_profile.json --as-of today --out clients\^<name^>
 endlocal

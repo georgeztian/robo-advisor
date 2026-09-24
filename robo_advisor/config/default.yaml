@@ -97,7 +97,7 @@ universe:                     # the ETFs a client may choose from, by category (
     Crypto ETFs: [IBIT]
 
 data:
-  provider: synthetic         # synthetic | csv | yahoo
+  provider: yahoo             # yahoo (real prices) | synthetic (offline simulated data) | csv
   csv_dir: data/prices
   cache_dir: .cache/prices
   lookback_years: 20          # spec §3/§6: most recent 20 years
