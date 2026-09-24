@@ -1,6 +1,7 @@
 import datetime as dt
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from conftest import AS_OF
@@ -58,7 +59,9 @@ def test_estimates_annualization_and_psd(frames, settings):
     r = frames["BND"]["adj_close"].pct_change().dropna()
     assert est.sigma[1] == pytest.approx(r.std() * np.sqrt(252), rel=0.01)
     me = frames["BND"]["adj_close"].groupby(frames["BND"].index.to_period("M")).last().pct_change().dropna()
+    me = me[me.index < "2026-09"]              # September 2026 is still in progress on the as-of date
     assert est.mu[1] == pytest.approx(me.mean() * 12, abs=1e-12)
+    assert est.monthly_returns.index[-1] == pd.Period("2026-08", "M")
     assert np.linalg.eigvalsh(est.cov).min() >= -1e-12
     assert np.allclose(np.sqrt(np.diag(est.cov)), est.sigma)
     assert est.history_years["DGRO"] < 13 < est.history_years["VOO"]

@@ -17,7 +17,9 @@ from typing import Protocol
 
 import numpy as np
 import pandas as pd
-from pandas.tseries.holiday import USFederalHolidayCalendar
+from pandas.tseries.holiday import (AbstractHolidayCalendar, GoodFriday, Holiday, USLaborDay,
+                                    USMartinLutherKingJr, USMemorialDay, USPresidentsDay,
+                                    USThanksgivingDay, nearest_workday)
 from pandas.tseries.offsets import CustomBusinessDay
 
 from ..universe import CATALOG
@@ -37,9 +39,26 @@ def _clip(df: pd.DataFrame, start: dt.date, end: dt.date) -> pd.DataFrame:
     return df.loc[(df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end)), COLUMNS]
 
 
+class NYSEHolidayCalendar(AbstractHolidayCalendar):
+    """Regular NYSE holidays (incl. Good Friday; no Columbus/Veterans Day). One-off closures
+    (e.g. national days of mourning) are not modelled and show up as single missing days."""
+
+    rules = [
+        Holiday("New Year's Day", month=1, day=1, observance=nearest_workday),
+        USMartinLutherKingJr, USPresidentsDay, GoodFriday, USMemorialDay,
+        Holiday("Juneteenth", month=6, day=19, start_date="2022-01-01", observance=nearest_workday),
+        Holiday("Independence Day", month=7, day=4, observance=nearest_workday),
+        USLaborDay, USThanksgivingDay,
+        Holiday("Christmas", month=12, day=25, observance=nearest_workday),
+    ]
+
+
+_BDAY = CustomBusinessDay(calendar=NYSEHolidayCalendar())
+
+
 def trading_calendar(start: dt.date, end: dt.date) -> pd.DatetimeIndex:
-    """Approximate NYSE calendar: weekdays excluding US federal holidays."""
-    return pd.date_range(start, end, freq=CustomBusinessDay(calendar=USFederalHolidayCalendar()))
+    """Approximate NYSE trading calendar."""
+    return pd.date_range(start, end, freq=_BDAY)
 
 
 # --------------------------------------------------------------------------- synthetic

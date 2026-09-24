@@ -12,9 +12,11 @@ flowchart TD
   client([client input]) --> intake
   intake --> risk_profiler & market_data
   risk_profiler --> constraints
-  market_data --> data_validation & estimation
+  market_data --> data_validation
+  data_validation --> G0{{review_data_gate}}
+  G0 --> estimation
   estimation --> tax_adjust
-  data_validation & estimation & tax_adjust & constraints & risk_profiler --> G1{{review_inputs_gate}}
+  estimation & tax_adjust & constraints & risk_profiler --> G1{{review_inputs_gate}}
   G1 --> optimizer
   optimizer --> G2{{review_portfolio_gate}}
   G2 -. remediate: re-optimize up to 2x .-> optimizer
@@ -32,14 +34,16 @@ Execution waves (nodes within a wave run concurrently):
 |---|---|
 | 0 | intake |
 | 1 | market_data ‖ risk_profiler |
-| 2 | constraints ‖ data_validation ‖ estimation |
-| 3 | tax_adjust |
-| 4 | ◆ review_inputs_gate |
-| 5 | optimizer |
-| 6 | ◆ review_portfolio_gate |
-| 7 | simulation ‖ scenarios ‖ benchmark ‖ projection |
-| 8 | explainer |
-| 9 | ◆ final_review_gate |
+| 2 | constraints ‖ data_validation |
+| 3 | ◆ review_data_gate (data problems surface as findings before estimation can fail) |
+| 4 | estimation |
+| 5 | tax_adjust |
+| 6 | ◆ review_inputs_gate |
+| 7 | optimizer |
+| 8 | ◆ review_portfolio_gate |
+| 9 | simulation ‖ scenarios ‖ benchmark ‖ projection |
+| 10 | explainer |
+| 11 | ◆ final_review_gate |
 
 ## Graph engine (`robo_advisor/graph/engine.py`)
 
@@ -89,16 +93,23 @@ benchmark, tax or questionnaire code. The reviewer recomputes independently:
 * its own Monte Carlo with a different seed and a different square-root factorization;
 * FV by month-by-month recursion (production uses the closed form);
 * the S&P 500 ending wealth by a plain loop over month-end prices;
-* an optimality spot-check against thousands of random feasible portfolios.
+* an independent re-solve of the Case B objective (max return, max Sharpe or min volatility, with long-only or split shorts);
+* a goal-minimality check: the reviewer builds its own lower-risk frontier and scores it with its own MC. If a portfolio with ≥10% lower volatility also reaches p, the run is blocked;
+* month-end backtests of **both** benchmark sides, recomputed from raw prices with the same rebalancing rule;
+* a distribution-tax lower bound along the median wealth path, which catches a tax engine that silently drops taxes.
 
 Each rule carries an ID, the spec section it enforces, a severity and a pass/fail message
 with evidence. The rule families:
 
 | Gate | Rule families |
 |---|---|
-| inputs | R-RISK (scores, min-mapping, band), R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, adjusted-price consistency), R-EST (μ, σ, PSD Σ), R-TAX, R-CON |
-| portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, σ ≤ σ_max, E[R] = w′μ and σ = √(w′Σw) reproduce, allocation reconciliation, case-correct objective, optimality spot-check |
-| final | All portfolio rules again, plus R-SIM (paths, monotone percentiles, recounted P(target) and P(loss), P ≥ p, independent-MC agreement), R-PROJ, R-SCN, R-BM (same inputs, 10-year window, recomputed S&P wealth), R-EXP (scores shown separately, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, leveraged-ETF disclosure) |
+| data | R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, blocking validation findings, independent adjusted-price consistency, expense ratios) |
+| inputs | R-RISK (scores, min-mapping, band), R-EST (coverage, μ, σ, PSD Σ), R-TAX, R-CON |
+| portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
+| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, leveraged-ETF disclosure) |
+
+When remediation fixes a gate, only the **latest** report of each stage decides the verdict.
+Superseded attempts are kept as history in the report and in `audit.json`.
 
 `tests/test_reviewer.py` tampers with real run outputs (weights summing to 1.05, a
 risk-limit breach, look-ahead data, a wrong mapping, altered μ, mismatched benchmark
@@ -129,5 +140,16 @@ blocked.
   available history inside the 20-year window. Short histories are flagged in validation, the
   explanation and the report, and covariances use pairwise overlap followed by a nearest-PSD
   repair.
+* **Taxes and shorts.** Only long positions have their distributions taxed and added to basis.
+  Payments in lieu on shorts are a non-deductible cost that is already in the total return. The
+  optimizer prices short legs at the **pre-tax** return, so a short cannot harvest the tax drag
+  of the asset it borrows.
+* **Conventions.** A month still in progress at the as-of date contributes no monthly return.
+  Validation uses an NYSE holiday calendar (Good Friday included).
+* **Known simplifications.**
+  - The short/long-term split uses a dollar-weighted average acquisition month, not lot-level FIFO.
+  - The bootstrap resamples only months in which every selected ETF has data.
+  - Selling to pay taxes does not itself realize gains.
+  - The reviewer's tax check is a lower bound (distribution taxes), not a full ledger recomputation.
 * **Spec inconsistencies handled.** §19 says "20-ETF list" but §3 lists 16, so the default
   universe is those 16. The §10 example uses SGOV, which is therefore an optional extra.

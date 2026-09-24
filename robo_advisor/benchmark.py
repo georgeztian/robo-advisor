@@ -71,15 +71,21 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
         rf_m = r.reindex(monthly.index).dropna()
     rf = float(rf_m.mean() * 12) if rf_m is not None and len(rf_m) > 6 else rf_fallback
 
-    port_lump, port_contrib = backtest(monthly[held], wh, W0, C, rebal)
-    bench_lump, bench_contrib = backtest(monthly[[benchmark]], np.array([1.0]), W0, C, rebal)
+    # time-weighted index (unit lump sum) drives every return metric, so the comparison is
+    # well defined even with a zero initial investment; wealth paths scale it / add contributions
+    port_idx = backtest(monthly[held], wh, 1.0, 0.0, rebal)[0]
+    port_contrib = backtest(monthly[held], wh, W0, C, rebal)[1]
+    one = np.array([1.0])
+    bench_idx = backtest(monthly[[benchmark]], one, 1.0, 0.0, rebal)[0]
+    bench_contrib = backtest(monthly[[benchmark]], one, W0, C, rebal)[1]
     idx = [start_p] + list(monthly.index)
     total_contrib = W0 + C * len(monthly)
 
-    def metrics(lump: np.ndarray, contrib: np.ndarray) -> dict:
-        rets = lump[1:] / lump[:-1] - 1
+    def metrics(index: np.ndarray, contrib: np.ndarray) -> dict:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rets = np.where(index[:-1] > 0, index[1:] / index[:-1] - 1, 0.0)
         n = len(rets)
-        cum = lump[-1] / lump[0] - 1
+        cum = index[-1] / index[0] - 1
         ann = (1 + cum) ** (12 / n) - 1
         vol = rets.std(ddof=1) * np.sqrt(12)
         s = pd.Series(rets, index=monthly.index)
@@ -90,8 +96,8 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
         return {
             "Cumulative return": cum, "Annualized return": ann, "Annualized volatility": vol,
             "Sharpe ratio": (rets.mean() * 12 - rf) / vol if vol > 0 else np.nan,
-            "Maximum drawdown": max_drawdown(lump),
-            "Ending wealth (initial investment only)": lump[-1],
+            "Maximum drawdown": max_drawdown(index),
+            "Ending wealth (initial investment only)": W0 * index[-1],
             "Ending wealth (with monthly contributions)": contrib[-1],
             "Total contributed": total_contrib,
             "Best year": float(yr.max()), "Best year (calendar)": int(yr.idxmax()),
@@ -99,11 +105,12 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
             "_yearly": yearly,
         }
 
-    mp, mb = metrics(port_lump, port_contrib), metrics(bench_lump, bench_contrib)
-    cal = pd.DataFrame({"Portfolio": mp.pop("_yearly"), BENCH_LABEL: mb.pop("_yearly")})
+    mp, mb = metrics(port_idx, port_contrib), metrics(bench_idx, bench_contrib)
+    months_in_year = pd.Series(1, index=monthly.index).groupby(monthly.index.year).size()
+    cal = pd.DataFrame({"Portfolio": mp.pop("_yearly"), BENCH_LABEL: mb.pop("_yearly"),
+                        "Months": months_in_year})
     table = pd.DataFrame({"Portfolio": mp, BENCH_LABEL: mb})
-    g10 = pd.DataFrame({"Portfolio": port_lump / port_lump[0] * 10000,
-                        BENCH_LABEL: bench_lump / bench_lump[0] * 10000}, index=pd.PeriodIndex(idx, freq="M"))
+    g10 = pd.DataFrame({"Portfolio": port_idx * 10000, BENCH_LABEL: bench_idx * 10000}, index=pd.PeriodIndex(idx, freq="M"))
     wc = pd.DataFrame({"Portfolio": port_contrib, BENCH_LABEL: bench_contrib,
                        "Contributed": W0 + C * np.arange(len(idx))}, index=pd.PeriodIndex(idx, freq="M"))
     return BenchmarkResult(start=px[px.index.to_period("M") == start_p].index[-1].date(), end=px.index[-1].date(),

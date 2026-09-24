@@ -96,6 +96,7 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         lt_rate_acc = np.zeros(P)
         inc_tax_acc = np.zeros(P)
         carry = np.zeros(P)
+        offset_used = np.zeros(P)
         paid = np.zeros(P)
     else:
         paid = np.zeros(P)
@@ -122,8 +123,8 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         lt = (month - A) >= 12
         return np.where(lt, 0.0, gain).sum(axis=1), np.where(lt, gain, 0.0), gain
 
-    def settle(month: int):
-        nonlocal st_acc, lt_acc, lt_rate_acc, inc_tax_acc, carry, V, B
+    def settle(month: int, offset_limit: np.ndarray | float | None = None):
+        nonlocal st_acc, lt_acc, lt_rate_acc, inc_tax_acc, carry, V, B, offset_used
         st, lt = st_acc.copy(), lt_acc.copy()
         # net short- against long-term, then apply carried-forward losses
         off = np.minimum(np.clip(-st, 0, None), np.clip(lt, 0, None))
@@ -135,7 +136,9 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         use = np.minimum(carry, np.clip(lt, 0, None))
         lt, carry = lt - use, carry - use
         net_loss = np.clip(-(st + lt), 0, None) * ((st <= 0) & (lt <= 0))
-        ordinary_offset = np.minimum(net_loss, tax.loss_offset)
+        limit = tax.loss_offset if offset_limit is None else offset_limit
+        ordinary_offset = np.minimum(net_loss, limit)
+        offset_used = ordinary_offset
         carry = carry + net_loss - ordinary_offset
         lt_rate = np.where(lt_acc > 0, lt_rate_acc / np.where(lt_acc > 0, lt_acc, 1), tax.lt.mean())
         lt_rate = np.clip(lt_rate, tax.lt.min(), tax.lt.max())
@@ -143,8 +146,10 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
                    - ordinary_offset * tax.ordinary)
         total = V.sum(axis=1)
         frac = np.where(total > 0, np.clip(due_tax / np.where(total > 0, total, 1), -1, 1), 0)
+        # taxes are paid by selling pro rata (basis falls proportionally); a refund is reinvested
+        # pro rata and adds its own amount to basis
+        B = np.where((frac >= 0)[:, None], B * (1 - frac)[:, None], B - frac[:, None] * V)
         V = V * (1 - frac)[:, None]
-        B = B * (1 - np.clip(frac, 0, None))[:, None]
         st_acc[:] = 0
         lt_acc[:] = 0
         lt_rate_acc[:] = 0
@@ -155,16 +160,18 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         r = model.draw(rng, P)
         prev_total = V.sum(axis=1)
         if taxed:
-            income = V * model.income_monthly
+            # distributions on long positions are taxed and reinvested (adding basis); payments in
+            # lieu of dividends on short positions are a non-deductible cost already in the return
+            income = np.clip(V, 0, None) * model.income_monthly
             inc_tax_acc += (income * tax.income).sum(axis=1)
-            buy(income, t)                                 # reinvested distributions add basis
+            buy(income, t)
         V = V * (1 + r)
         total = V.sum(axis=1)
         rp = np.where(prev_total > 0, total / np.where(prev_total > 0, prev_total, 1) - 1, 0)
         index = index * (1 + rp)
         peak = np.maximum(peak, index)
         mdd = np.minimum(mdd, index / peak - 1)
-        broke = total <= 0
+        broke = (total <= 0) & (prev_total > 0)       # wiped out (not merely not yet funded)
         if broke.any():
             alive &= ~broke
             V[broke] = 0
@@ -204,7 +211,9 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         st_acc += st_g
         lt_acc += lt_g.sum(axis=1)
         lt_rate_acc += (lt_g * tax.lt).sum(axis=1)
-        liq_tax = settle(T + 1)
+        # liquidation happens in the same tax year as the final settlement: the annual
+        # ordinary-income offset is not available twice
+        liq_tax = settle(T + 1, np.clip(tax.loss_offset - offset_used, 0, None))
         after_liq = V.sum(axis=1)
         paid += liq_tax
     return RawSim(terminal, after_liq, wealth, mdd, paid)

@@ -70,8 +70,8 @@ class IntakeAgent:
         method = pref.optimization_method or s.optimization.default_method
         if method not in METHODS:
             raise ValueError(f"unknown optimization method {method!r}; choose from {METHODS}")
-        if not client.goal.has_target and method == "target_return":
-            raise ValueError("the target_return method needs a target; provide a target amount and date")
+        if not client.goal.has_target and method == "target_return" and pref.target_return is None:
+            raise ValueError("the target_return method needs preferences.target_return (annual return)")
         rb = s.rebalancing.model_copy(update={k: v for k, v in {
             "type": pref.rebalancing_type, "frequency": pref.rebalancing_frequency,
             "threshold": pref.rebalancing_threshold}.items() if v is not None})
@@ -132,7 +132,7 @@ class DataValidationAgent:
 class EstimationAgent:
     """Step 6c: returns, volatility, covariance, downside risk (spec §6)."""
 
-    name, requires, provides = "estimation", ("request", "market"), ("estimates",)
+    name, requires, provides = "estimation", ("request", "market", "review_data"), ("estimates",)
 
     def __init__(self, sv: Services):
         self.sv = sv
@@ -199,8 +199,10 @@ class OptimizerAgent:
         attempt = st.get("remediation", {}).get("attempt", 0)
         mu = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
         scen = (tax.monthly_after_tax if tax.monthly_after_tax is not None else est.monthly_returns).dropna().to_numpy()
+        # short legs pay the pre-tax return: a short cannot collect the borrowed asset's tax drag
         opt = Optimizer(mu, est.cov, rc, est.risk_free, scen, n_starts=s.optimization.n_starts * 2**attempt,
-                        seed=attempt, cvar_alpha=s.optimization.cvar_alpha)
+                        seed=attempt, cvar_alpha=s.optimization.cvar_alpha, mu_short=est.mu,
+                        scenarios_short=est.monthly_returns.dropna().to_numpy())
         notes = [f"remediation attempt {attempt}: re-optimized with more solver starts"] if attempt else []
         if req.has_target:
             g = s.optimization.goal
@@ -212,11 +214,11 @@ class OptimizerAgent:
                               verify_paths=s.simulation.n_paths, verify_seed=s.simulation.seed)
             case = "target"
         else:
-            res = opt.run(req.method)
+            res = opt.run(req.method, target=req.client.preferences.target_return)
             case = "no_target"
         w = res.weights
         vol = opt.vol(w)
-        ret = float(w @ mu)
+        ret = opt.port_return(w)
         port = Portfolio(
             tickers=req.tickers, weights=w, method=res.method, case=case, expected_return=ret,
             expected_return_pretax=float(w @ est.mu), volatility=vol,
@@ -328,6 +330,8 @@ def build_advisory_graph(settings: Settings, provider: DataProvider) -> Graph:
         a = cls(sv)
         g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides), tuple(getattr(a, "optional", ())),
                    description=(cls.__doc__ or "").strip().splitlines()[0]))
+    g.add(_gate("review_data_gate", rv.review_data, ("request", "market", "data_quality"), "review_data",
+                "Reviewer: data validation, look-ahead, universe (before estimation)"))
     g.add(_gate("review_inputs_gate", rv.review_inputs,
                 ("request", "risk", "market", "data_quality", "estimates", "tax", "constraints"),
                 "review_inputs", "Reviewer: data, estimates, risk mapping, constraints"))

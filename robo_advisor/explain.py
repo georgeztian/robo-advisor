@@ -102,17 +102,20 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     if req.has_target:
         pt = sim.prob_target or 0.0
         gs = port.goal_search or {}
-        goal_text = (
-            f"Given your initial investment of {_money(req.W0)}, monthly contribution of {_money(req.C)}, "
-            f"and target of {_money(req.target)} by {req.target_date:%B %Y} ({req.months} months), the optimizer "
-            f"selected the portfolio that minimizes estimated "
-            f"{'CVaR of terminal wealth' if req.goal_risk_metric == 'cvar' else 'volatility'} while "
-            f"satisfying the target-achievement constraint P(terminal wealth >= target) >= "
-            f"{req.target_probability:.0%}. In {sim.n_paths:,} simulated paths the probability of "
-            f"reaching the target is {pt:.1%}.")
-        if gs.get("infeasible"):
-            goal_text += (" No portfolio within your risk limit reaches the required probability, so the "
-                          "portfolio with the highest probability is shown.")
+        intro = (f"Given your initial investment of {_money(req.W0)}, monthly contribution of {_money(req.C)}, "
+                 f"and target of {_money(req.target)} by {req.target_date:%B %Y} ({req.months} months), ")
+        if not gs.get("infeasible"):
+            goal_text = intro + (
+                f"the optimizer selected the portfolio that minimizes estimated "
+                f"{'CVaR of terminal wealth' if req.goal_risk_metric == 'cvar' else 'volatility'} while "
+                f"satisfying the target-achievement constraint P(terminal wealth >= target) >= "
+                f"{req.target_probability:.0%}. In {sim.n_paths:,} simulated paths the probability of "
+                f"reaching the target is {pt:.1%}.")
+        else:
+            goal_text = intro + (
+                f"No portfolio within your risk limit reaches the required {req.target_probability:.0%} "
+                f"probability of meeting the target, so the optimizer selected the portfolio with the highest "
+                f"probability: {pt:.1%} in {sim.n_paths:,} simulated paths.")
             if gs.get("required_monthly_contribution"):
                 goal_text += (f" Raising the monthly contribution to about "
                               f"{_money(gs['required_monthly_contribution'])} would reach "

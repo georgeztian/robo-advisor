@@ -72,6 +72,7 @@ class TaxInput(BaseModel):
 
 class Preferences(BaseModel):
     optimization_method: str | None = None             # None -> config default
+    target_return: float | None = None                 # for the target_return method (Case B)
     goal_risk_metric: Literal["volatility", "cvar"] | None = None
     target_probability: float | None = Field(None, gt=0, lt=1)
     rebalancing_type: Literal["calendar", "threshold"] | None = None

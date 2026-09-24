@@ -45,8 +45,14 @@ class OptResult:
 class Optimizer:
     def __init__(self, mu: np.ndarray, cov: np.ndarray, rc: ResolvedConstraints, risk_free: float,
                  scenarios: np.ndarray | None = None, n_starts: int = 6, seed: int = 0,
-                 cvar_alpha: float = 0.95):
+                 cvar_alpha: float = 0.95, mu_short: np.ndarray | None = None,
+                 scenarios_short: np.ndarray | None = None):
+        """``mu`` is the return earned on long positions (after tax when taxes are enabled).
+        ``mu_short`` is the return a short position pays away: pre-tax, since a short cannot
+        collect the tax drag of the asset it borrows (defaults to ``mu``)."""
         self.mu, self.cov, self.rc, self.rf = np.asarray(mu), np.asarray(cov), rc, risk_free
+        self.mu_short = np.asarray(mu_short) if mu_short is not None else self.mu
+        self.scenarios_short = scenarios_short if scenarios_short is not None else scenarios
         self.n = len(mu)
         self.space = Space(self.n, rc)
         self.space.check_feasible()
@@ -60,6 +66,26 @@ class Optimizer:
     def vol(self, w: np.ndarray) -> float:
         return float(np.sqrt(max(w @ self.cov @ w, 0.0)))
 
+    def port_return(self, w: np.ndarray) -> float:
+        """Expected return: long legs earn mu, short legs pay mu_short."""
+        return float(np.clip(w, 0, None) @ self.mu - np.clip(-w, 0, None) @ self.mu_short)
+
+    def _ret_x(self, x: np.ndarray) -> float:
+        n = self.n
+        return float(x[:n] @ self.mu - x[n:] @ self.mu_short) if self.space.short else float(x @ self.mu)
+
+    def _ret_grad_x(self) -> np.ndarray:
+        return np.concatenate([self.mu, -self.mu_short]) if self.space.short else self.mu
+
+    def _wfun(self, fun):
+        """Lift a (value, gradient) function of the weights to the solver variables."""
+        sp = self.space
+
+        def f(x):
+            val, g = fun(sp.to_w(x))
+            return val, sp.grad_to_x(g)
+        return f
+
     def _solve(self, fun, extra_cons: list[dict] | None = None, vol_cap: bool = True,
                starts: list[np.ndarray] | None = None) -> np.ndarray:
         sp = self.space
@@ -67,13 +93,9 @@ class Optimizer:
         if vol_cap:
             cons.append(sp.vol_constraint(self.cov, self.rc.max_volatility))
 
-        def f(x):
-            val, g = fun(sp.to_w(x))
-            return val, sp.grad_to_x(g)
-
         best, best_val = None, np.inf
         for x0 in starts or sp.starts(self.n_starts, self.rng):
-            res = minimize(f, x0, jac=True, method="SLSQP", bounds=sp.bounds(), constraints=cons,
+            res = minimize(fun, x0, jac=True, method="SLSQP", bounds=sp.bounds(), constraints=cons,
                            options={"maxiter": 500, "ftol": 1e-12})
             w = sp.to_w(res.x)
             ok = sp.is_feasible(w, 1e-6, self.cov, self.rc.max_volatility if vol_cap else None)
@@ -91,7 +113,7 @@ class Optimizer:
     def min_vol_portfolio(self) -> np.ndarray:
         if self._minvol is None:
             cov = self.cov
-            self._minvol = self._solve(lambda w: (w @ cov @ w, 2 * cov @ w), vol_cap=False)
+            self._minvol = self._solve(self._wfun(lambda w: (w @ cov @ w, 2 * cov @ w)), vol_cap=False)
         return self._minvol
 
     def check_risk_limit_feasible(self) -> None:
@@ -119,31 +141,33 @@ class Optimizer:
 
     # ------------------------------------------------------------------ methods
     def mean_variance(self) -> OptResult:
-        mu = self.mu
+        g = -self._ret_grad_x()
         starts = self.space.starts(self.n_starts, self.rng) + [self.space.from_w(self.min_vol_portfolio())]
-        w = self._solve(lambda w: (-(mu @ w), -mu), starts=starts)
+        w = self._solve(lambda x: (-self._ret_x(x), g), starts=starts)
         return OptResult(w, "mean_variance")
 
     def min_volatility(self) -> OptResult:
         return OptResult(self.min_vol_portfolio(), "min_volatility")
 
     def max_sharpe(self) -> OptResult:
-        mu, cov, rf = self.mu, self.cov, self.rf
+        cov, rf, sp = self.cov, self.rf, self.space
+        gr = self._ret_grad_x()
 
-        def f(w):
+        def f(x):
+            w = sp.to_w(x)
             s = np.sqrt(max(w @ cov @ w, 1e-16))
-            ex = mu @ w - rf
-            return -ex / s, -(mu / s - ex * (cov @ w) / s**3)
+            ex = self._ret_x(x) - rf
+            return -ex / s, -(gr / s - ex * sp.grad_to_x(cov @ w) / s**3)
 
         starts = self.space.starts(self.n_starts, self.rng) + [self.space.from_w(self.min_vol_portfolio())]
         return OptResult(self._solve(f, starts=starts), "max_sharpe")
 
     def target_return(self, target: float) -> OptResult:
-        mu, cov, sp = self.mu, self.cov, self.space
-        con = {"type": "ineq", "fun": lambda x: mu @ sp.to_w(x) - target,
-               "jac": lambda x: sp.grad_to_x(mu)}
+        cov, sp = self.cov, self.space
+        gr = self._ret_grad_x()
+        con = {"type": "ineq", "fun": lambda x: self._ret_x(x) - target, "jac": lambda x: gr}
         starts = [sp.from_w(self.min_vol_portfolio())] + sp.starts(max(2, self.n_starts // 2), self.rng)
-        w = self._solve(lambda w: (w @ cov @ w, 2 * cov @ w), extra_cons=[con], starts=starts)
+        w = self._solve(self._wfun(lambda w: (w @ cov @ w, 2 * cov @ w)), extra_cons=[con], starts=starts)
         return OptResult(w, "target_return", diagnostics={"target_return": target})
 
     def cvar(self) -> OptResult:
@@ -156,7 +180,7 @@ class Optimizer:
         d = sp.dim
         # variables: x (d), zeta (1), u (S)
         c = np.concatenate([np.zeros(d), [1.0], np.full(S, 1 / ((1 - a) * S))])
-        Rx = np.hstack([R, -R]) if sp.short else R
+        Rx = np.hstack([R, -self.scenarios_short]) if sp.short else R
         A_ub = np.hstack([-Rx, -np.ones((S, 1)), -np.eye(S)])
         b_ub = np.zeros(S)
         if sp.short:
@@ -173,9 +197,13 @@ class Optimizer:
         notes = [f"blended {t:.0%} toward minimum-volatility to satisfy the volatility limit"] if t > 0 else []
         return OptResult(w, "cvar", notes, {"monthly_cvar": float(res.fun), "alpha": a, "scenarios": S})
 
-    def _long_only_space_note(self) -> list[str]:
-        return (["long-only by construction (method undefined with short positions)"]
-                if self.rc.allow_short else [])
+    def _long_only_space_note(self, w: np.ndarray) -> list[str]:
+        if not self.rc.allow_short:
+            return []
+        if (w < -1e-9).any():
+            return ["solved long-only (method undefined with short positions); blending toward the "
+                    "minimum-volatility portfolio to meet the risk limit introduced short positions"]
+        return ["long-only by construction (method undefined with short positions)"]
 
     def risk_parity(self) -> OptResult:
         cov, n, m = self.cov, self.n, self.rc.max_position
@@ -197,7 +225,7 @@ class Optimizer:
                        options={"maxiter": 1000, "ftol": 1e-14})
         w = self._clean(np.clip(res.x, 0, m))
         w, t = self.blend_to_cap(w)
-        notes = self._long_only_space_note()
+        notes = self._long_only_space_note(w)
         if t > 0:
             notes.append(f"blended {t:.0%} toward minimum-volatility to satisfy the volatility limit")
         return OptResult(w, "risk_parity", notes)
@@ -216,7 +244,7 @@ class Optimizer:
                        constraints=cons, options={"maxiter": 1000, "ftol": 1e-14})
         w = self._clean(np.clip(res.x, 0, m))
         w, t = self.blend_to_cap(w)
-        notes = self._long_only_space_note()
+        notes = self._long_only_space_note(w)
         if t > 0:
             notes.append(f"blended {t:.0%} toward minimum-volatility to satisfy the volatility limit")
         return OptResult(w, "max_diversification", notes)

@@ -72,11 +72,12 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
                                      "S&P 500": (wc["S&P 500"].tolist(), "--series-2"),
                                      "Contributed": (wc["Contributed"].tolist(), "--text-muted")},
                                 label="wealth with contributions")
-    reviews = result.reviews
+    reviews = result.latest_reviews()
     final = [r for r in reviews if r.stage == "final"]
     review_ok = all(r.ok for r in reviews) and bool(final)
     n = sum(len(r.findings) for r in reviews)
     passed = sum(f.passed for r in reviews for f in r.findings)
+    superseded = result.superseded_reviews()
     ctx = dict(
         client_name=req.client.profile.name, as_of=req.as_of, data_source=st["market"].source,
         synthetic=st["market"].synthetic, exp=exp, risk=risk, port=port, sim=sim, proj=st["projection"],
@@ -90,7 +91,9 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         growth_chart=growth, contrib_chart=contrib, bench_rows=_bench_rows(bench.metrics),
         stats_rows=list(est.stats.iterrows()), corr_tickers=est.tickers,
         corr_rows=list(zip(est.tickers, est.corr.tolist())), dq_rows=list(dq.tickers.values()),
-        reviews=reviews, review_ok=review_ok, review_summary=f"{passed}/{n} checks passed",
+        reviews=reviews, superseded=superseded, review_ok=review_ok,
+        review_summary=f"{passed}/{n} checks passed" + (
+            f" (after {len(superseded)} remediated attempt(s))" if superseded else ""),
         trace=result.trace, mermaid=mermaid,
         calculations=json.dumps(exp.calculations, indent=2, default=_json_default))
     return _ENV.get_template("report.html.j2").render(**ctx)
@@ -106,6 +109,12 @@ def _json_default(o: Any):
     if isinstance(o, pd.DataFrame):
         return json.loads(o.to_json(orient="split", date_format="iso"))
     return str(o)
+
+
+def _review_json(r) -> dict:
+    return {"stage": r.stage, "ok": r.ok,
+            "findings": [{"rule": f.rule_id, "spec": f.spec_ref, "severity": f.severity,
+                          "passed": f.passed, "message": f.message} for f in r.findings]}
 
 
 def audit_bundle(result: RunResult) -> dict:
@@ -127,10 +136,8 @@ def audit_bundle(result: RunResult) -> dict:
                       "goal_search": {k: v for k, v in (port.goal_search or {}).items() if k != "frontier"}},
         "estimates": {"tickers": est.tickers, "mu": est.mu.tolist(), "sigma": est.sigma.tolist(),
                       "corr": est.corr.tolist(), "risk_free": est.risk_free},
-        "reviews": [{"stage": r.stage, "ok": r.ok,
-                     "findings": [{"rule": f.rule_id, "spec": f.spec_ref, "severity": f.severity,
-                                   "passed": f.passed, "message": f.message} for f in r.findings]}
-                    for r in result.reviews],
+        "reviews": [_review_json(r) for r in result.latest_reviews()],
+        "superseded_reviews": [_review_json(r) for r in result.superseded_reviews()],
         "trace": [{"wave": e.wave, "node": e.node, "kind": e.kind, "attempt": e.attempt, "status": e.status,
                    "seconds": round(e.seconds, 4), "outputs": e.outputs, "detail": e.detail} for e in result.trace],
     }

@@ -17,7 +17,7 @@ FAST = {
     "simulation": {"n_paths": 3000},
     "scenarios": {"n_paths": 1000},
     "optimization": {"goal": {"search_paths": 800, "frontier_points": 10}},
-    "review": {"mc_paths": 2000, "optimality_samples": 5000},
+    "review": {"mc_paths": 2000},
 }
 
 
