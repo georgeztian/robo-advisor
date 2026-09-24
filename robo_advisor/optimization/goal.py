@@ -43,15 +43,14 @@ def goal_search(opt: Optimizer, model: MCModel, W0: float, C: float, T: int, tar
                 alpha: float = 0.95, verify_paths: int | None = None,
                 verify_seed: int | None = None) -> OptResult:
     opt.check_risk_limit_feasible()
-    mu = opt.mu
     w_lo = opt.min_vol_portfolio()
     w_hi = opt.mean_variance().weights
-    r_lo, r_hi = float(mu @ w_lo), float(mu @ w_hi)
+    r_lo, r_hi = opt.port_return(w_lo), opt.port_return(w_hi)
     evals: list[dict] = []
 
     def evaluate(w: np.ndarray, r: float) -> dict:
         term = _terminal(w, model, W0, C, T, rebal, tax, paths, seed)
-        e = {"target_return": r, "exp_return": float(mu @ w), "vol": opt.vol(w),
+        e = {"target_return": r, "exp_return": opt.port_return(w), "vol": opt.vol(w),
              "prob": float((term >= target).mean()), "exp_terminal": float(term.mean()),
              "cvar_risk": terminal_cvar_risk(term, alpha), "w": w}
         evals.append(e)
@@ -134,18 +133,19 @@ def _verify(opt, best, frontier, model, W0, C, T, target, p, rebal, tax, paths, 
     final projection reports). If it falls short of p, move up the frontier (higher return)
     and bisect with the full sample until the constraint holds."""
     def prob(w):
-        return float((_terminal(w, model, W0, C, T, rebal, tax, paths, seed) >= target).mean())
+        term = _terminal(w, model, W0, C, T, rebal, tax, paths, seed)
+        return float((term >= target).mean()), float(term.mean())
 
-    pb = prob(best["w"])
+    pb, eb = prob(best["w"])
     if pb >= p:
-        return best, pb
+        return {**best, "prob": pb, "exp_terminal": eb}, pb
     higher = sorted((e for e in frontier if e["target_return"] > best["target_return"]),
                     key=lambda e: e["target_return"])
     lo_r, lo = best["target_return"], None
     for e in higher:
-        pe = prob(e["w"])
+        pe, ee = prob(e["w"])
         if pe >= p:
-            hi_r, hi, hi_p = e["target_return"], e, pe
+            hi_r, hi, hi_p = e["target_return"], {**e, "prob": pe, "exp_terminal": ee}, pe
             break
         lo_r = e["target_return"]
     else:
@@ -156,11 +156,11 @@ def _verify(opt, best, frontier, model, W0, C, T, target, p, rebal, tax, paths, 
             w = opt.target_return(mid).weights
         except ValueError:
             break
-        pm = prob(w)
+        pm, em = prob(w)
         if pm >= p:
             hi_r, hi_p = mid, pm
-            hi = {"target_return": mid, "exp_return": float(opt.mu @ w), "vol": opt.vol(w), "prob": pm,
-                  "exp_terminal": float("nan"), "cvar_risk": float("nan"), "w": w}
+            hi = {"target_return": mid, "exp_return": opt.port_return(w), "vol": opt.vol(w), "prob": pm,
+                  "exp_terminal": em, "cvar_risk": float("nan"), "w": w}
         else:
             lo_r = mid
     return hi, hi_p

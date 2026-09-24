@@ -72,6 +72,10 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
         if err > cfg.adj_consistency_tol:
             issues.append(f"adjusted close inconsistent with splits/distributions (max err {err:.4f})")
             blocking.append(f"{t}: adjusted prices inconsistent with splits/distributions (max err {err:.4f})")
+        if len(df) < cfg.min_observations:
+            issues.append(f"only {len(df)} observations")
+            blocking.append(f"{t}: only {len(df)} daily observations up to {as_of}; at least "
+                            f"{cfg.min_observations} are needed to estimate risk")
         n_splits = int((df["split_ratio"] != 1).sum())
         n_div = int((df["dividend"] > 0).sum())
         years = (last - max(first, window_start)).days / 365.25

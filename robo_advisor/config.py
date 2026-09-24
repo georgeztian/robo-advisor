@@ -56,6 +56,7 @@ class DataCfg(BaseModel):
     cache_dir: str = ".cache/prices"
     lookback_years: int = 20
     min_history_years: float = 20
+    min_observations: int = 252
     max_missing_fraction: float = 0.02
     max_ffill_days: int = 3
     adj_consistency_tol: float = 0.002
@@ -148,8 +149,8 @@ class ReviewCfg(BaseModel):
     sigma_rel_tol: float = 0.02
     mc_z: float = 4.0
     mc_paths: int = 4000
-    optimality_samples: int = 20000
     optimality_tol: float = 0.0025
+    backtest_rel_tol: float = 0.005
     wealth_rel_tol: float = 1e-6
 
 

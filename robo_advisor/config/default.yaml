@@ -94,6 +94,7 @@ data:
   cache_dir: .cache/prices
   lookback_years: 20          # spec §3/§6: most recent 20 years
   min_history_years: 20       # below this an ETF is flagged; max available history is used
+  min_observations: 252       # an ETF needs at least ~1 year of daily data (below -> BLOCKER)
   max_missing_fraction: 0.02  # of expected trading days, per ETF (above -> BLOCKER)
   max_ffill_days: 3           # short gaps forward-filled for alignment (and flagged)
   adj_consistency_tol: 0.002  # max daily abs gap between adj-close return and close+div+split return
@@ -165,6 +166,6 @@ review:                           # independent reviewer agent tolerances
   sigma_rel_tol: 0.02             # relative volatility difference (calendar alignment effects)
   mc_z: 4.0                       # MC probability comparisons use z * standard error
   mc_paths: 4000                  # reviewer's own Monte Carlo
-  optimality_samples: 20000       # random feasible portfolios for the optimality spot-check
-  optimality_tol: 0.0025          # sampled return may not beat the optimizer by more than this
+  optimality_tol: 0.0025          # independent re-solve may not beat the optimizer's return by more
+  backtest_rel_tol: 0.005         # independent month-end backtests (raw vs adjusted prices)
   wealth_rel_tol: 1.0e-6          # deterministic recomputations (FV, backtests, allocations)

@@ -14,7 +14,7 @@ def failed(rep):
 
 def test_clean_run_passes_every_rule(target_run, no_target_run):
     for run in (target_run, no_target_run):
-        assert [r.stage for r in run.reviews] == ["inputs", "portfolio", "final"]
+        assert [r.stage for r in run.reviews] == ["data", "inputs", "portfolio", "final"]
         assert all(r.ok for r in run.reviews) and not any(r.warnings for r in run.reviews)
 
 
@@ -45,7 +45,7 @@ def test_blocks_look_ahead_data(settings, target_run):
     extra.index = [df.index[-1] + pd.Timedelta(days=5)]
     frames["VOO"] = pd.concat([df, extra])
     st["market"] = MarketData(frames, m.as_of, m.source, m.synthetic)
-    assert "R-DATA-01" in failed(Reviewer(settings).review_inputs(st))
+    assert "R-DATA-01" in failed(Reviewer(settings).review_data(st))
 
 
 def test_blocks_wrong_risk_mapping(settings, target_run):

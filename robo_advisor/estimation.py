@@ -72,10 +72,20 @@ def month_end_prices(daily: pd.DataFrame) -> pd.DataFrame:
     return daily.groupby(daily.index.to_period("M")).last()
 
 
+def complete_months(monthly: pd.DataFrame, as_of: dt.date) -> pd.DataFrame:
+    """Drop the as-of month when it is still in progress (a partial month is not a monthly return)."""
+    nxt = pd.Timestamp(as_of) + pd.offsets.BDay(1)
+    if len(monthly) and nxt.month == as_of.month:
+        return monthly.iloc[:-1] if monthly.index[-1] == pd.Period(as_of, "M") else monthly
+    return monthly
+
+
 def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date,
              window_start: dt.date, data_cfg: DataCfg, cfg: EstimationCfg) -> Estimates:
     for t in tickers:
-        if len(frames[t]) and frames[t].index[-1].date() > as_of:
+        if t not in frames or len(frames[t]) < 2:
+            raise EstimationError(f"no usable price history for {t} up to {as_of}")
+        if frames[t].index[-1].date() > as_of:
             raise EstimationError(f"look-ahead: {t} has data after {as_of}")
     td = cfg.trading_days
     px = align_prices(frames, tickers, data_cfg.max_ffill_days)
@@ -91,7 +101,7 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
     corr = cov / np.outer(d, d)
 
     mpx = month_end_prices(px)
-    monthly = mpx.pct_change(fill_method=None).iloc[1:]
+    monthly = complete_months(mpx.pct_change(fill_method=None).iloc[1:], as_of)
     mu = monthly.mean().to_numpy() * 12
     if cfg.mu_shrinkage > 0:
         mu = (1 - cfg.mu_shrinkage) * mu + cfg.mu_shrinkage * mu.mean()
@@ -105,7 +115,7 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
 
     rf_t = data_cfg.risk_free_ticker
     if rf_t in frames and len(frames[rf_t]) > 60:
-        rf_m = month_end_prices(frames[rf_t][["adj_close"]])["adj_close"].pct_change().dropna()
+        rf_m = complete_months(month_end_prices(frames[rf_t][["adj_close"]])["adj_close"].pct_change().dropna(), as_of)
         risk_free = float(rf_m.mean() * 12)
     else:
         risk_free = data_cfg.risk_free_fallback

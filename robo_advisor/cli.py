@@ -149,7 +149,7 @@ def cmd_run(args) -> int:
         if abs(w) > 1e-6:
             print(f"  {t:<5} {w:7.2%}  ${w * client.goal.initial_investment:>12,.0f}  "
                   f"${w * client.goal.monthly_contribution:>9,.0f}/mo")
-    for r in res.reviews:
+    for r in res.latest_reviews():
         print(r.summary())
     print(f"\nReport: {html_path}\nAudit:  {audit_path}")
     if args.timeline:

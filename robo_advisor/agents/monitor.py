@@ -31,7 +31,10 @@ def build_monitoring_graph(settings: Settings, provider: DataProvider) -> Graph:
                 TaxAgent, ConstraintAgent, MonitorAgent):
         a = cls(sv)
         g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides), description=(cls.__doc__ or "").strip()))
-    g.add(_gate("review_inputs_gate", Reviewer(settings).review_inputs,
+    rv = Reviewer(settings)
+    g.add(_gate("review_data_gate", rv.review_data, ("request", "market", "data_quality"), "review_data",
+                "Reviewer: data validation, look-ahead, universe (before estimation)"))
+    g.add(_gate("review_inputs_gate", rv.review_inputs,
                 ("request", "risk", "market", "data_quality", "estimates", "tax", "constraints"),
                 "review_inputs", "Reviewer: data, estimates, risk mapping, constraints"))
     g.build()

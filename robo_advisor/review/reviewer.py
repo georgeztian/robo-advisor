@@ -17,6 +17,7 @@ import datetime as dt
 from typing import Any, Mapping
 
 import numpy as np
+import pandas as pd
 
 from ..config import Settings
 from ..models import ReviewFinding, ReviewReport
@@ -35,9 +36,68 @@ class Reviewer:
         self.cfg = settings.review
 
     # ------------------------------------------------------------------ helpers
+    def _income_rate(self, t: str) -> float:
+        """Distribution tax rate from the catalog's income character (independent of tax.py)."""
+        tc, ti = self.s.tax, self._tax_in
+        g = lambda v, d: d if v is None else v          # noqa: E731
+        state = g(ti.state_rate, tc.state_rate)
+        ordinary = g(ti.ordinary_rate, tc.ordinary_rate) + state
+        qual = g(ti.qualified_dividend_rate, tc.qualified_dividend_rate) + state
+        info = CATALOG[t]
+        if info.income_type == "interest":
+            return ordinary
+        if info.income_type == "none":
+            return 0.0
+        return info.qualified_fraction * qual + (1 - info.qualified_fraction) * ordinary
+
     @staticmethod
     def _f(out: list, rule: str, spec: str, sev: str, ok: bool, msg: str, **ev: Any) -> None:
         out.append(ReviewFinding(rule, spec, sev, bool(ok), msg, {k: _plain(v) for k, v in ev.items()}))
+
+    # ------------------------------------------------------------------ stage: data
+    def review_data(self, st: Mapping[str, Any]) -> ReviewReport:
+        """Runs before estimation so data problems surface as findings, not crashes."""
+        out: list[ReviewFinding] = []
+        f = self._f
+        req, market, dq = st["request"], st["market"], st["data_quality"]
+        # universe (spec §3)
+        allowed = set(self.s.universe.default) | set(self.s.universe.optional_extra)
+        f(out, "R-UNIV-01", "§3", "BLOCKER", set(req.tickers) <= allowed and set(req.tickers) <= set(market.frames),
+          f"optimizer universe {req.tickers} is the client's selection within the allowed universe")
+        # data (spec §3, §6)
+        late = {t: str(df.index[-1].date()) for t, df in market.frames.items()
+                if len(df) and df.index[-1].date() > req.as_of}
+        f(out, "R-DATA-01", "§6", "BLOCKER", not late,
+          "no observation after the as-of date (no look-ahead)" if not late else f"look-ahead data: {late}")
+        exp_start = _years_before(req.as_of, self.s.data.lookback_years)
+        f(out, "R-DATA-02", "§3/§6", "BLOCKER", abs((req.window_start - exp_start).days) <= 3,
+          f"estimation window starts {req.window_start} (expected {exp_start}: most recent "
+          f"{self.s.data.lookback_years} years)")
+        unflagged = [t for t, q in dq.tickers.items() if not q.meets_min_history
+                     and not any(w.startswith(f"{t}:") and "history" in w for w in dq.warnings)]
+        f(out, "R-DATA-03", "§3", "BLOCKER", not unflagged,
+          "ETFs with < 20 years of history are flagged (maximum available history used)"
+          if not unflagged else f"short histories not flagged: {unflagged}")
+        f(out, "R-DATA-04", "§3", "BLOCKER", not dq.blocking,
+          "data validation passed" if not dq.blocking else "; ".join(dq.blocking))
+        bad_adj = {}
+        for t in req.tickers:
+            df = market.frames.get(t)
+            if df is None or len(df) < 2:
+                continue                      # reported by R-UNIV-01 / R-DATA-04
+            adj_r = df["adj_close"].pct_change().to_numpy()[1:]
+            tri = ind.tr_index_from_raw(df).to_numpy()
+            raw_r = np.diff(tri) / tri[:-1]
+            err = float(np.nanmax(np.abs(adj_r - raw_r))) if len(raw_r) else 0.0
+            if err > self.s.data.adj_consistency_tol:
+                bad_adj[t] = err
+        f(out, "R-DATA-05", "§3", "BLOCKER", not bad_adj,
+          "adjusted prices consistent with raw close, splits and distributions (independent check)"
+          if not bad_adj else f"inconsistent adjusted prices: {bad_adj}")
+        no_er = [t for t in req.tickers if CATALOG.get(t) is None or CATALOG[t].expense_ratio is None]
+        f(out, "R-DATA-06", "§3", "WARN", not no_er, "expense ratios available for all ETFs"
+          if not no_er else f"missing expense ratio: {no_er}")
+        return ReviewReport("data", out)
 
     # ------------------------------------------------------------------ stage: inputs
     def review_inputs(self, st: Mapping[str, Any]) -> ReviewReport:
@@ -66,43 +126,12 @@ class Reviewer:
           set(risk.capacity_detail) == {q.id for q in qs.capacity}
           and set(risk.tolerance_detail) == {q.id for q in qs.tolerance},
           "capacity and tolerance measured separately with every configured question answered")
-        # universe (spec §3)
-        allowed = set(self.s.universe.default) | set(self.s.universe.optional_extra)
-        f(out, "R-UNIV-01", "§3", "BLOCKER", set(req.tickers) <= allowed and est.tickers == req.tickers,
-          f"optimizer universe {req.tickers} is the client's selection within the allowed universe")
-        # data (spec §3, §6)
-        late = {t: str(df.index[-1].date()) for t, df in market.frames.items()
-                if len(df) and df.index[-1].date() > req.as_of}
-        f(out, "R-DATA-01", "§6", "BLOCKER", not late and est.window_end <= req.as_of,
-          "no observation after the as-of date (no look-ahead)" if not late else f"look-ahead data: {late}")
-        exp_start = _years_before(req.as_of, self.s.data.lookback_years)
-        f(out, "R-DATA-02", "§3/§6", "BLOCKER", abs((req.window_start - exp_start).days) <= 3,
-          f"estimation window starts {req.window_start} (expected {exp_start}: most recent "
-          f"{self.s.data.lookback_years} years)")
-        unflagged = [t for t, q in dq.tickers.items() if not q.meets_min_history
-                     and not any(w.startswith(f"{t}:") and "history" in w for w in dq.warnings)]
-        f(out, "R-DATA-03", "§3", "BLOCKER", not unflagged,
-          "ETFs with < 20 years of history are flagged (maximum available history used)"
-          if not unflagged else f"short histories not flagged: {unflagged}")
-        f(out, "R-DATA-04", "§3", "BLOCKER", not dq.blocking,
-          "data validation passed" if not dq.blocking else "; ".join(dq.blocking))
-        bad_adj = {}
-        for t in req.tickers:
-            df = market.frames[t]
-            adj_r = df["adj_close"].pct_change().to_numpy()[1:]
-            raw_r = np.diff(ind.tr_index_from_raw(df).to_numpy()) / ind.tr_index_from_raw(df).to_numpy()[:-1]
-            err = float(np.nanmax(np.abs(adj_r - raw_r))) if len(raw_r) else 0.0
-            if err > self.s.data.adj_consistency_tol:
-                bad_adj[t] = err
-        f(out, "R-DATA-05", "§3", "BLOCKER", not bad_adj,
-          "adjusted prices consistent with raw close, splits and distributions (independent check)"
-          if not bad_adj else f"inconsistent adjusted prices: {bad_adj}")
-        no_er = [t for t in req.tickers if CATALOG.get(t) is None or CATALOG[t].expense_ratio is None]
-        f(out, "R-DATA-06", "§3", "WARN", not no_er, "expense ratios available for all ETFs"
-          if not no_er else f"missing expense ratio: {no_er}")
         # estimates (spec §6)
+        f(out, "R-EST-00", "§3/§6", "BLOCKER", est.tickers == req.tickers and est.window_end <= req.as_of,
+          "estimates cover exactly the selected ETFs and end at the as-of date")
         frames = {t: market.frames[t][market.frames[t].index >= np.datetime64(req.window_start)] for t in req.tickers}
-        mu_r, sig_r = ind.mu_sigma(frames, req.tickers, self.s.estimation.trading_days, self.s.estimation.mu_shrinkage)
+        mu_r, sig_r = ind.mu_sigma(frames, req.tickers, self.s.estimation.trading_days, self.s.estimation.mu_shrinkage,
+                                req.as_of)
         dmu = np.abs(mu_r - est.mu)
         dsig = np.abs(sig_r / est.sigma - 1)
         f(out, "R-EST-01", "§6", "BLOCKER", float(dmu.max()) <= self.cfg.mu_abs_tol,
@@ -136,7 +165,7 @@ class Reviewer:
         return ReviewReport("inputs", out)
 
     # ------------------------------------------------------------------ stage: portfolio
-    def review_portfolio(self, st: Mapping[str, Any]) -> ReviewReport:
+    def _portfolio_rules(self, st: Mapping[str, Any]) -> list[ReviewFinding]:
         out: list[ReviewFinding] = []
         f = self._f
         req, est, tax, rc, port = st["request"], st["estimates"], st["tax"], st["constraints"], st["portfolio"]
@@ -156,10 +185,12 @@ class Reviewer:
         f(out, "R-PORT-06", "§2C/§7/§8", "BLOCKER", vol <= rc.max_volatility + tol,
           f"portfolio volatility {vol:.2%} <= limit {rc.max_volatility:.0%} of the mapped risk profile")
         mu_opt = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
+        # long legs earn the optimizer's (after-tax) mu; short legs pay the pre-tax mu
+        ret = float(np.clip(w, 0, None) @ mu_opt - np.clip(-w, 0, None) @ est.mu)
         f(out, "R-PORT-07", "§9", "BLOCKER",
-          abs(port.expected_return - w @ mu_opt) < 1e-9 and abs(port.volatility - vol) < 1e-9
+          abs(port.expected_return - ret) < 1e-9 and abs(port.volatility - vol) < 1e-9
           and abs(port.expected_return_pretax - w @ est.mu) < 1e-9,
-          f"E[Rp] = w'mu = {w @ mu_opt:.4%}, sigma_p = sqrt(w' Sigma w) = {vol:.4%} reproduce reported values")
+          f"E[Rp] = w'mu = {ret:.4%}, sigma_p = sqrt(w' Sigma w) = {vol:.4%} reproduce reported values")
         f(out, "R-PORT-11", "§5", "BLOCKER", (tax.mu_after_tax is not None) == bool(req.client.taxes.enabled),
           "optimizer return inputs are after-tax exactly when taxes are enabled")
         ia, ma = port.initial_allocation, port.monthly_allocation
@@ -178,36 +209,73 @@ class Reviewer:
             f(out, "R-PORT-10", "§8", "BLOCKER", port.case == "no_target" and port.method == req.method,
               f"no-target client: {port.method} subject to the mapped risk limit")
         f(out, "R-PORT-12", "§9", "WARN", bool(port.method), "optimization method disclosed")
-        # optimality spot-check against random feasible portfolios (independent search)
-        if not req.has_target and not rc.allow_short and port.method in ("mean_variance", "max_sharpe", "min_volatility"):
-            rng = np.random.default_rng(12345)
-            S = ind.sample_long_only(len(w), rc.max_position, self.cfg.optimality_samples, rng)
-            vols = np.sqrt(np.einsum("ij,jk,ik->i", S, est.cov, S))
-            rets = S @ mu_opt
-            feas = vols <= rc.max_volatility
-            if port.method == "mean_variance":
-                best = float(rets[feas].max()) if feas.any() else -np.inf
-                val = float(w @ mu_opt)
-                ok = best <= val + self.cfg.optimality_tol
-                msg = f"no sampled feasible portfolio beats the optimizer's return {val:.3%} (best sampled {best:.3%})"
-            elif port.method == "max_sharpe":
-                sh = (rets - est.risk_free) / vols
-                best = float(sh[feas].max()) if feas.any() else -np.inf
-                val = (w @ mu_opt - est.risk_free) / vol
-                ok = best <= val + 0.02
-                msg = f"no sampled feasible portfolio beats the optimizer's Sharpe {val:.3f} (best sampled {best:.3f})"
+        return out
+
+    def review_portfolio(self, st: Mapping[str, Any]) -> ReviewReport:
+        return ReviewReport("portfolio", self._portfolio_rules(st) + self._optimality_rules(st))
+
+    def _optimality_rules(self, st: Mapping[str, Any]) -> list[ReviewFinding]:
+        """Independent re-solves: the recommended portfolio must actually optimize the stated
+        objective (Case B) or be the lowest-risk portfolio meeting the target (Case A)."""
+        out: list[ReviewFinding] = []
+        f = self._f
+        req, est, tax, rc, port = st["request"], st["estimates"], st["tax"], st["constraints"], st["portfolio"]
+        w = np.asarray(port.weights, float)
+        mu_l = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
+        args = (mu_l, est.mu, est.cov, rc.allow_short, rc.max_position, rc.max_gross_leverage, rc.max_volatility)
+        vol = float(np.sqrt(w @ est.cov @ w))
+        if not req.has_target:
+            kind = {"mean_variance": "max_return", "min_volatility": "min_vol", "max_sharpe": "max_sharpe"}.get(port.method)
+            if kind is None:
+                f(out, "R-PORT-09", "§8/§9", "INFO", True,
+                  f"{port.method}: no independent re-solve (constraint and risk-limit rules still apply)")
+                return out
+            _, best = ind.resolve(kind, *args, rf=est.risk_free)
+            if kind == "max_return":
+                val, tol, ok_fn, unit = port.expected_return, self.cfg.optimality_tol, lambda b, v, t: v >= b - t, "return"
+            elif kind == "max_sharpe":
+                val, tol, ok_fn, unit = port.sharpe, 0.01, lambda b, v, t: v >= b - t, "Sharpe"
             else:
-                best = float(vols.min())
-                ok = best >= vol - 1e-3
-                msg = f"no sampled portfolio has lower volatility than {vol:.3%} (lowest sampled {best:.3%})"
-            f(out, "R-PORT-09", "§8/§9", "WARN", ok, msg, samples=len(S))
-        return ReviewReport("portfolio", out)
+                val, tol, ok_fn, unit = vol, 1e-4, lambda b, v, t: v <= b + t, "volatility"
+            ok = bool(np.isnan(best)) or ok_fn(best, val, tol)
+            f(out, "R-PORT-09", "§8/§9", "BLOCKER", ok,
+              f"independent re-solve: optimizer {unit} {val:.4f} vs independent {best:.4f} (tolerance {tol})")
+            return out
+        gs = port.goal_search or {}
+        if req.goal_risk_metric != "volatility" or gs.get("infeasible"):
+            f(out, "R-PORT-13", "§7", "INFO", True, "goal minimality check applies to the volatility metric "
+              "with a feasible target (see R-SIM-04 for the infeasible case)")
+            return out
+        # candidate lower-risk portfolios on the reviewer's own frontier, scored by its own MC
+        rb = req.rebalancing
+        every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
+        thr = rb.threshold if rb.type == "threshold" else None
+        w_mv, v_mv = ind.resolve("min_vol", *args)
+        r_mv = float(np.clip(w_mv, 0, None) @ mu_l - np.clip(-w_mv, 0, None) @ est.mu)
+        n, p, z = self.cfg.mc_paths, req.target_probability, self.cfg.mc_z
+        se = np.sqrt(p * (1 - p) / n)
+        offenders = []
+        for r in np.linspace(r_mv, port.expected_return, 6)[:-1]:
+            wc, vc = (w_mv, v_mv) if r <= r_mv + 1e-12 else ind.resolve("min_vol", *args, min_return=r)
+            if wc is None or vc > 0.9 * vol:
+                continue
+            term = ind.mc_terminal(wc, est.mu, est.cov, req.W0, req.C, req.months, every, thr, n, 991)
+            pc = float((term >= req.target).mean())
+            if pc >= p + z * se:
+                offenders.append((round(vc, 4), round(pc, 3)))
+        sev = "BLOCKER" if not req.client.taxes.enabled else "WARN"   # reviewer MC is pre-tax
+        f(out, "R-PORT-13", "§7", sev, not offenders,
+          f"no portfolio with >=10% lower volatility than {vol:.2%} reaches the target probability "
+          f"{p:.0%} (independent frontier + MC)" if not offenders else
+          f"lower-risk portfolios also meet the target (vol, P): {offenders}")
+        return out
 
     # ------------------------------------------------------------------ stage: final
     def review_final(self, st: Mapping[str, Any]) -> ReviewReport:
-        out: list[ReviewFinding] = list(self.review_portfolio(st).findings)
+        out: list[ReviewFinding] = self._portfolio_rules(st)
         f = self._f
         req, est, port, sim = st["request"], st["estimates"], st["portfolio"], st["simulation"]
+        self._tax_in = req.client.taxes
         proj, bench, scen, exp, market, tax = (st["projection"], st["benchmark"], st["scenarios"],
                                                st["explanation"], st["market"], st["tax"])
         z = self.cfg.mc_z
@@ -258,6 +326,15 @@ class Reviewer:
         else:
             f(out, "R-SIM-05", "§5/§12", "BLOCKER", med_p <= med_r * 1.02,
               f"after-tax median terminal wealth {med_p:,.0f} does not exceed independent pre-tax median {med_r:,.0f}")
+            # lower bound: tax on distributions alone along the median wealth path
+            y = est.income_yield
+            inc_rate = np.array([self._income_rate(t) for t in port.tickers])
+            wl = np.clip(w, 0, None)
+            monthly_rate = float(wl @ (y * inc_rate)) / 12
+            bound = float(sim.band["p50"].iloc[:-1].sum() * monthly_rate) if sim.band is not None else 0.0
+            f(out, "R-TAX-02", "§5", "BLOCKER", bound < 100 or sim.taxes_paid_median >= 0.6 * bound,
+              f"median taxes paid {sim.taxes_paid_median:,.0f} >= 60% of the independent distribution-tax "
+              f"estimate {bound:,.0f} (capital-gains tax comes on top)")
         # deterministic projection (spec §11)
         r = port.expected_return / 12
         fv = ind.fv_by_recursion(req.W0, req.C, r, req.months)
@@ -274,28 +351,49 @@ class Reviewer:
         m = bench.metrics
         f(out, "R-BM-04", "§14", "BLOCKER", all(k in m.index for k in REQUIRED_BENCH_METRICS),
           "all required benchmark metrics reported")
+        n_months = len(bench.growth_of_10k) - 1
+        exp_contrib = req.W0 + req.C * n_months
         same = (bench.initial_investment == req.W0 and bench.monthly_contribution == req.C
-                and m.loc["Total contributed", "Portfolio"] == m.loc["Total contributed", "S&P 500"]
-                and len(bench.growth_of_10k["Portfolio"].dropna()) == len(bench.growth_of_10k["S&P 500"].dropna()))
+                and all(abs(float(m.loc["Total contributed", c]) - exp_contrib) < 1e-6 for c in m.columns)
+                and abs(float(bench.wealth_with_contributions["Contributed"].iloc[-1]) - exp_contrib) < 1e-6)
         f(out, "R-BM-01", "§14", "BLOCKER", same,
-          "portfolio and S&P 500 use the same initial investment, contributions, period and return convention")
+          f"both sides use W0 {req.W0:,.0f} and C {req.C:,.0f} over the same {n_months} months "
+          f"(total contributed {exp_contrib:,.0f})")
         yrs_ok = bench.years >= self.s.benchmark.years - 1 / 12 or bool(bench.notes)
         f(out, "R-BM-02", "§14", "BLOCKER", yrs_ok and bench.end <= req.as_of,
           f"comparison period {bench.start} to {bench.end} ({bench.years:.1f} years)" +
           ("" if bench.years >= self.s.benchmark.years - 1 / 12 else " - shortened and disclosed"))
+        # independent month-end backtests of BOTH sides from raw prices
+        tol = self.cfg.backtest_rel_tol
+        first = bench.growth_of_10k.index[0].to_timestamp(how="start").date()
+        rb = req.rebalancing
+        every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
+        thr = rb.threshold if rb.type == "threshold" else None
+
+        def close(a: float, b: float) -> bool:
+            return abs(a - b) <= tol * max(abs(b), 1.0)
+
         bm_t = self.s.data.benchmark
-        start_me = bench.growth_of_10k.index[0].to_timestamp(how="end").date()
-        me = ind.month_end_series(market.frames[bm_t], start_me.replace(day=1), bench.end)
+        me = ind.month_end_series(market.frames[bm_t], first, bench.end)
         lump, contrib = ind.single_asset_wealth(me, req.W0, req.C)
         el = float(m.loc["Ending wealth (initial investment only)", "S&P 500"])
         ec = float(m.loc["Ending wealth (with monthly contributions)", "S&P 500"])
-        f(out, "R-BM-03", "§14", "BLOCKER", abs(el / lump - 1) <= 1e-6 and abs(ec / contrib - 1) <= 1e-6,
+        f(out, "R-BM-03", "§14", "BLOCKER", close(el, lump) and close(ec, contrib),
           f"S&P 500 ending wealth recomputed from raw prices: {lump:,.0f} / {contrib:,.0f} "
           f"(reported {el:,.0f} / {ec:,.0f})")
+        held = [(t, x) for t, x in zip(port.tickers, port.weights) if abs(x) > 1e-9]
+        mes = pd.concat({t: ind.month_end_series(market.frames[t], first, bench.end) for t, _ in held}, axis=1)
+        pl, pc = ind.portfolio_wealth(mes, np.array([x for _, x in held]), req.W0, req.C, every, thr)
+        rl = float(m.loc["Ending wealth (initial investment only)", "Portfolio"])
+        rc_ = float(m.loc["Ending wealth (with monthly contributions)", "Portfolio"])
+        f(out, "R-BM-05", "§14", "BLOCKER", close(rl, pl) and close(rc_, pc),
+          f"portfolio ending wealth recomputed from raw prices with the same rebalancing rule: "
+          f"{pl:,.0f} / {pc:,.0f} (reported {rl:,.0f} / {rc_:,.0f})")
         # explanation & disclosures (spec §2C, §6, §13, §15, §16)
         rk = st["risk"]
-        f(out, "R-EXP-01", "§2C/§16", "BLOCKER",
-          all(f"{v:.0f}" in exp.risk_text for v in (rk.capacity_score, rk.tolerance_score, rk.mapped_score)),
+        phrases = [f"risk-capacity score is {rk.capacity_score:.0f}", f"risk-tolerance score is {rk.tolerance_score:.0f}",
+                   f"mapped risk score is therefore {rk.mapped_score:.0f}"]
+        f(out, "R-EXP-01", "§2C/§16", "BLOCKER", all(ph in exp.risk_text for ph in phrases),
           "capacity, tolerance and mapped risk scores displayed separately")
         disc = " ".join(exp.disclosures)
         f(out, "R-EXP-02", "§6", "BLOCKER", "historical estimates" in disc,

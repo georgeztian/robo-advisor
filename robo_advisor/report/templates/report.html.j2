@@ -170,7 +170,7 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
   {% for k, row in bench_rows %}<tr><td>{{ k }}</td><td class="num">{{ row[0] }}</td><td class="num">{{ row[1] }}</td></tr>{% endfor %}
   </table></div>
   <details><summary>Calendar-year returns</summary><div class="scroll"><table><tr><th>Year</th><th class="num">Portfolio</th><th class="num">S&amp;P 500</th></tr>
-  {% for y, r in bench.calendar_year_returns.iterrows() %}<tr><td>{{ y }}</td><td class="num">{{ "%.1f%%"|format(r["Portfolio"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r["S&P 500"]*100) }}</td></tr>{% endfor %}
+  {% for y, r in bench.calendar_year_returns.iterrows() %}<tr><td>{{ y }}{% if r["Months"] < 12 %} (partial: {{ r["Months"]|int }} months){% endif %}</td><td class="num">{{ "%.1f%%"|format(r["Portfolio"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r["S&P 500"]*100) }}</td></tr>{% endfor %}
   </table></div></details>
 </section>
 
@@ -201,6 +201,12 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
   <details {{ 'open' if not rep.ok }}><summary>{{ rep.summary() }}</summary><div class="scroll"><table>
     <tr><th>Rule</th><th>Spec</th><th>Severity</th><th>Status</th><th>Check</th></tr>
     {% for f in rep.findings %}<tr><td>{{ f.rule_id }}</td><td>{{ f.spec_ref }}</td><td>{{ f.severity }}</td><td class="status {{ 'pass' if f.passed else ('fail' if f.severity == 'BLOCKER' else 'warn') }}">{{ '✔ pass' if f.passed else '✖ fail' }}</td><td>{{ f.message }}</td></tr>{% endfor %}
+  </table></div></details>
+  {% endfor %}
+  {% for rep in superseded %}
+  <details><summary>Superseded by remediation: {{ rep.summary() }}</summary><div class="scroll"><table>
+    <tr><th>Rule</th><th>Status</th><th>Check</th></tr>
+    {% for f in rep.findings if not f.passed %}<tr><td>{{ f.rule_id }}</td><td class="status fail">✖ fail</td><td>{{ f.message }}</td></tr>{% endfor %}
   </table></div></details>
   {% endfor %}
   <details><summary>Agent workflow trace</summary><div class="scroll"><table>

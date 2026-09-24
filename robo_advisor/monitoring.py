@@ -72,13 +72,30 @@ def assess(prior: dict, req: Request, risk: RiskAssessment, est: Estimates, rate
         trig.append(Trigger("RISK_PROFILE_CHANGED",
                             f"mapped risk profile changed from {pr['profile']} to {risk.profile}"))
 
-    # risk limit & market-driven risk changes
+    # realized performance since the prior recommendation (buy-and-hold drift of the target weights;
+    # contributions and interim rebalancing are not reconstructed)
+    since = est.daily_returns[est.daily_returns.index > np.datetime64(prior["as_of"])].fillna(0.0)
+    drifted = w.copy()
+    if len(since):
+        growth = np.prod(1 + since.to_numpy(), axis=0)
+        value = w * growth
+        m["performance_since_prior"] = {"days": len(since), "return": float(value.sum() - 1),
+                                        "by_etf": {t: float(g - 1) for t, g, x in zip(est.tickers, growth, w)
+                                                   if abs(x) > 1e-9}}
+        if value.sum() > 0:
+            drifted = value / value.sum()
+    m["drifted_weights"] = {t: float(x) for t, x in zip(est.tickers, drifted) if abs(x) > 1e-9}
+
+    # risk limit (on the CURRENT, drifted holdings) & market-driven risk changes
     vol_now = float(np.sqrt(w @ est.cov @ w))
+    vol_drift = float(np.sqrt(drifted @ est.cov @ drifted))
     vol_prior = prior["portfolio"]["volatility"]
-    m["portfolio_volatility"] = {"prior": vol_prior, "now": vol_now, "limit": risk.max_volatility}
-    if vol_now > risk.max_volatility + cfg.risk_limit_tolerance:
+    m["portfolio_volatility"] = {"prior": vol_prior, "now_target_weights": vol_now,
+                                 "now_drifted_weights": vol_drift, "limit": risk.max_volatility}
+    worst = max(vol_now, vol_drift)
+    if worst > risk.max_volatility + cfg.risk_limit_tolerance:
         trig.append(Trigger("RISK_LIMIT_EXCEEDED",
-                            f"portfolio volatility {vol_now:.1%} exceeds the {risk.max_volatility:.0%} limit"))
+                            f"portfolio volatility {worst:.1%} exceeds the {risk.max_volatility:.0%} limit"))
     if vol_prior > 0 and abs(vol_now / vol_prior - 1) > cfg.volatility_change_trigger:
         trig.append(Trigger("VOLATILITY_SHIFT", f"estimated portfolio volatility moved from {vol_prior:.1%} to {vol_now:.1%}"))
     pt = prior["estimates"]["tickers"]

@@ -70,6 +70,17 @@ class RunResult:
     trace: list[TraceEvent]
     reviews: list[ReviewReport]
 
+    def latest_reviews(self) -> list[ReviewReport]:
+        """The last report of each review stage (earlier ones were superseded by remediation)."""
+        last: dict[str, ReviewReport] = {}
+        for r in self.reviews:
+            last[r.stage] = r
+        return list(last.values())
+
+    def superseded_reviews(self) -> list[ReviewReport]:
+        latest = {id(r) for r in self.latest_reviews()}
+        return [r for r in self.reviews if id(r) not in latest]
+
     def timeline(self) -> str:
         return "\n".join(f"w{e.wave} {e.node:<18} {e.kind:<5} try{e.attempt} {e.status:<8} "
                          f"{e.seconds * 1000:8.1f} ms {e.detail}" for e in self.trace)
