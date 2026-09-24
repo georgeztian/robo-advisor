@@ -1,6 +1,8 @@
 @echo off
-rem One-time setup (Windows): creates a private Python environment in .venv and installs
-rem the robo-advisor with Yahoo Finance support and the test tools. Safe to re-run (updates).
+rem Setup (Windows): creates a private Python environment in .venv and installs the
+rem robo-advisor with Yahoo Finance support and the test tools. Safe to re-run (updates).
+rem You rarely need to call this yourself: ra.bat runs it automatically whenever the
+rem environment is missing, incomplete, or older than pyproject.toml's dependency list.
 rem
 rem   setup.bat            install / update
 rem   setup.bat --fresh    delete .venv and reinstall from scratch
@@ -37,8 +39,9 @@ echo Installing robo-advisor and its libraries ^(this can take a few minutes^) .
 ".venv\Scripts\python.exe" -m pip install --quiet --upgrade pip || exit /b 1
 ".venv\Scripts\python.exe" -m pip install --quiet -e ".[yahoo,dev]" || exit /b 1
 
-rem 4. smoke check
+rem 4. smoke check, then record which dependency list was installed (ra compares this stamp)
 ".venv\Scripts\robo-advisor.exe" graph >nul || exit /b 1
+".venv\Scripts\python.exe" -c "import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest())" pyproject.toml > ".venv\.install-stamp" || exit /b 1
 echo.
 echo Setup complete. The environment is used automatically by ra.bat - no activation needed:
 echo   .\ra run --profile examples\client_target.json

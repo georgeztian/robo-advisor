@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# One-time setup (macOS / Linux): creates a private Python environment in .venv and installs
-# the robo-advisor with Yahoo Finance support and the test tools. Safe to re-run (updates).
+# Setup (macOS / Linux): creates a private Python environment in .venv and installs the
+# robo-advisor with Yahoo Finance support and the test tools. Safe to re-run (updates).
+# You rarely need to call this yourself: ./ra runs it automatically whenever the environment
+# is missing, incomplete, or older than pyproject.toml's dependency list.
 #
 #   ./setup.sh            install / update
 #   ./setup.sh --fresh    delete .venv and reinstall from scratch
@@ -38,8 +40,10 @@ echo "Installing robo-advisor and its libraries (this can take a few minutes) ..
 .venv/bin/python -m pip install --quiet --upgrade pip
 .venv/bin/python -m pip install --quiet -e ".[yahoo,dev]"
 
-# 4. smoke check
+# 4. smoke check, then record which dependency list was installed (ra compares this stamp)
 .venv/bin/robo-advisor graph >/dev/null
+.venv/bin/python -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  pyproject.toml > .venv/.install-stamp
 echo
 echo "Setup complete. The environment is used automatically by ./ra - no activation needed:"
 echo "  ./ra run --profile examples/client_target.json                         # demo (synthetic data)"

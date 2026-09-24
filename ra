@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
-# Run the robo-advisor inside the project's private environment (.venv), creating it first
-# if needed. Usage: ./ra <command> [options]   e.g.  ./ra run --interactive --provider yahoo
-#                   ./ra test                   runs the test suite
+# Run the robo-advisor inside the project's private environment (.venv).
+# The environment is installed or updated automatically when it is missing, incomplete, or
+# its dependency list (pyproject.toml) changed since the last install, e.g. after `git pull`.
+#
+# Usage: ./ra <command> [options]    e.g.  ./ra run --interactive --provider yahoo
+#        ./ra test                   runs the test suite
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-if [[ ! -x "$here/.venv/bin/robo-advisor" ]]; then
-  echo "Private environment not found - running first-time setup ..."
-  "$here/setup.sh"
-fi
+venv="$here/.venv"
+
+env_status() {   # prints: ok | missing | outdated
+  if [[ ! -x "$venv/bin/robo-advisor" || ! -f "$venv/.install-stamp" ]]; then
+    echo missing; return
+  fi
+  "$venv/bin/python" -c 'import hashlib, sys
+cur = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
+print("ok" if cur == open(sys.argv[2]).read().strip() else "outdated")' \
+    "$here/pyproject.toml" "$venv/.install-stamp" 2>/dev/null || echo missing
+}
+
+case "$(env_status)" in
+  missing)  echo "Private environment missing or incomplete - installing the app ..."; "$here/setup.sh" ;;
+  outdated) echo "Dependencies changed since the last install - updating the environment ..."; "$here/setup.sh" ;;
+esac
+
 if [[ "${1:-}" == "test" ]]; then
   shift
-  cd "$here" && exec "$here/.venv/bin/python" -m pytest -q "$@"
+  cd "$here" && exec "$venv/bin/python" -m pytest -q "$@"
 fi
-exec "$here/.venv/bin/robo-advisor" "$@"
+exec "$venv/bin/robo-advisor" "$@"
