@@ -2,8 +2,7 @@
 
 The robo-advisor is a set of single-responsibility **agents** connected by a typed
 **workflow graph**. An **independent reviewer agent** sits at four gates in that graph. The
-original requirements, extracted from `robo-advisor.docx` with all Word equations converted to
-LaTeX, are in [`SPEC.md`](SPEC.md). How to install and run the app is in the
+original requirements, with all equations in LaTeX, are in [`SPEC.md`](SPEC.md). How to install and run the app is in the
 [README](../README.md).
 
 ## Advisory graph

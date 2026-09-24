@@ -1,10 +1,15 @@
-Fully Functional Robo-Advisor Workflow
+# Fully Functional Robo-Advisor Workflow
 
-1. Client Onboarding and Investment Questionnaire
+> The original specification of this robo-advisor. The app implements it with a few deliberate
+> changes, documented in [ARCHITECTURE.md](ARCHITECTURE.md): the ETF menu is 25 ETFs in 9 categories
+> (replacing the list in §3), clients choose ETFs by category, per-category allocation limits apply,
+> and ETFs with less than 20 years of history use their maximum available history (§3).
+
+## 1. Client Onboarding and Investment Questionnaire
 
 The robo-advisor begins by collecting the information needed to determine the client's investment objective, financial circumstances, and risk profile.
 
-A. Investment Goal
+### A. Investment Goal
 
 Ask:
 
@@ -34,7 +39,7 @@ The optimizer should maximize expected return subject to the client's mapped ris
 
 The target-date formulation should account for both the initial investment and recurring monthly contributions rather than treating the target as a single lump-sum investment.
 
-2. Risk-Profiling Questionnaire
+## 2. Risk-Profiling Questionnaire
 
 The questionnaire should separately measure:
 
@@ -44,7 +49,7 @@ The questionnaire should separately measure:
 
 These should be measured separately rather than combining all answers into one score.
 
-A. Risk Capacity Questions
+### A. Risk Capacity Questions
 
 Examples:
 
@@ -70,7 +75,7 @@ Examples:
 
 Each answer is assigned a numerical risk-capacity score, for example from 0–100.
 
-B. Risk Tolerance Questions
+### B. Risk Tolerance Questions
 
 Examples:
 
@@ -90,7 +95,7 @@ Examples:
 
 Each answer is assigned a numerical risk-tolerance score, for example from 0–100.
 
-C. Mapping the Two Scores
+### C. Mapping the Two Scores
 
 Calculate:
 
@@ -126,11 +131,11 @@ The exact cutoffs and volatility limits should be configurable rather than hard-
 
 The system should display the capacity score, tolerance score, and mapped risk score separately, so the client can understand why the portfolio receives a particular risk constraint.
 
-3. Investment Universe Selection
+## 3. Investment Universe Selection
 
 The client can choose which ETFs the robo-advisor is allowed to consider.
 
-Candidate ETF Universe
+### Candidate ETF Universe
 
 - VOO
 
@@ -168,7 +173,7 @@ The application should initially present the complete universe and allow the cli
 
 The optimizer may allocate only among the ETFs selected by the client.
 
-ETF Data Validation
+### ETF Data Validation
 
 Before optimization, the system should check:
 
@@ -192,13 +197,13 @@ Before optimization, the system should check:
 
 The application should estimate parameters using the recent 20-year history data. For ETFs with less than 20 years of history, the application should estimate parameters using the maximum available history, or
 
-4. Short-Sale Constraint
+## 4. Short-Sale Constraint
 
 The client chooses:
 
 Are short sales allowed?
 
-If No
+### If No
 
 Portfolio weights must satisfy:
 
@@ -208,7 +213,7 @@ and
 
 $$\sum_{i} {w}_{i}=1$$
 
-If Yes
+### If Yes
 
 Negative portfolio weights are permitted:
 
@@ -226,17 +231,17 @@ $${w}_{i}\le 50\%$$
 
 or a configurable value.
 
-5. Tax Consideration
+## 5. Tax Consideration
 
 Ask:
 
 Should taxes be incorporated into the portfolio analysis?
 
-If No
+### If No
 
 The optimizer operates on pre-tax returns.
 
-If Yes
+### If Yes
 
 The system should incorporate:
 
@@ -272,11 +277,11 @@ The optimizer should use the after-tax return series when taxes are enabled.
 
 Because actual taxation depends on account type and individual circumstances, the tax module should be presented as an estimated tax model, not individualized tax advice.
 
-6. Historical Data and Parameter Estimation
+## 6. Historical Data and Parameter Estimation
 
 Use historical data to estimate the inputs required by the optimizer.
 
-Estimation Window
+### Estimation Window
 
 Use the most recent 20 years of available historical data, subject to each ETF's actual inception date.
 
@@ -296,7 +301,7 @@ The system should avoid look-ahead bias.
 
 For a portfolio created at date  $t$ , parameter estimation must use only information available through  $t$ .
 
-Parameters Estimated
+### Parameters Estimated
 
 For each ETF:
 
@@ -328,7 +333,7 @@ The system may also estimate:
 
 Expected returns should not simply be interpreted as guaranteed future returns. The interface should clearly label them as historical estimates / model assumptions.
 
-7. Portfolio Optimizer
+## 7. Portfolio Optimizer
 
 The optimizer uses the client's:
 
@@ -356,7 +361,7 @@ The optimizer uses the client's:
 
 to determine portfolio weights.
 
-Case A: Client Has a Target Amount and Target Date
+### Case A: Client Has a Target Amount and Target Date
 
 The objective is:
 
@@ -408,7 +413,7 @@ where  $p$ might be 80%, 90%, or another configurable threshold.
 
 This makes the target-date robo-advisor more realistic than simply solving a traditional mean-variance problem.
 
-8. Case B: No Specific Target Amount
+## 8. Case B: No Specific Target Amount
 
 When the client does not specify a target amount, the optimizer should:
 
@@ -438,11 +443,11 @@ $${\sigma }_{max}=17\%$$
 
 The exact mapping should be configurable.
 
-9. Portfolio Optimization Methods
+## 9. Portfolio Optimization Methods
 
 The application should support more than one optimization method.
 
-Primary Method
+### Primary Method
 
 Mean-Variance Optimization
 
@@ -454,7 +459,7 @@ and
 
 $${\sigma }_{p}^{2}={w}^{'}\Sigma w$$
 
-Alternative Risk Models
+### Alternative Risk Models
 
 The application can also support:
 
@@ -472,7 +477,7 @@ The application can also support:
 
 For the client-facing robo-advisor, the selected methodology should be displayed clearly rather than hiding the optimization process.
 
-10. Recommended Portfolio
+## 10. Recommended Portfolio
 
 The system should present the resulting portfolio in a transparent format.
 
@@ -496,7 +501,7 @@ Example:
 
 The application should also explain why each ETF receives its allocation, based on its estimated return, volatility, covariance with other assets, and contribution to overall portfolio risk.
 
-11. Financial Projection
+## 11. Financial Projection
 
 After determining the recommended portfolio, the robo-advisor should project future wealth.
 
@@ -524,7 +529,7 @@ for the simplified deterministic projection.
 
 However, the primary projection should be probabilistic rather than relying only on one expected-return path.
 
-12. Monte Carlo Simulation
+## 12. Monte Carlo Simulation
 
 Run a Monte Carlo simulation of future portfolio values.
 
@@ -574,31 +579,31 @@ Probability of achieving target = percentage of simulations in which terminal we
 
 This should be one of the most prominent outputs.
 
-13. Scenario Analysis
+## 13. Scenario Analysis
 
 In addition to the baseline Monte Carlo simulation, provide scenarios such as:
 
-Conservative Scenario
+### Conservative Scenario
 
 Lower expected returns / higher adverse-return assumptions.
 
-Base Scenario
+### Base Scenario
 
 Historical/model-implied assumptions.
 
-Optimistic Scenario
+### Optimistic Scenario
 
 Higher expected returns / favorable-return assumptions.
 
 The application should clearly distinguish these scenarios from forecasts.
 
-14. S&P 500 Benchmark Comparison
+## 14. S&P 500 Benchmark Comparison
 
 The recommended portfolio should be compared with an S&P 500 benchmark.
 
 Use VOO or an appropriate S&P 500 total-return benchmark for the historical comparison, depending on the implementation.
 
-Historical Comparison Period
+### Historical Comparison Period
 
 Use the most recent 10 years for the benchmark comparison.
 
@@ -630,19 +635,19 @@ For example:
 
 This provides an intuitive wealth comparison rather than only comparing percentages.
 
-15. Portfolio Visualization
+## 15. Portfolio Visualization
 
 The dashboard should include:
 
-Asset Allocation
+### Asset Allocation
 
 Pie or bar chart showing ETF weights.
 
-Historical Performance
+### Historical Performance
 
 Growth of $10,000 or the user's actual initial investment.
 
-Future Projection
+### Future Projection
 
 Monte Carlo confidence bands showing:
 
@@ -656,7 +661,7 @@ Monte Carlo confidence bands showing:
 
 - 90th percentile
 
-Target Progress
+### Target Progress
 
 For users with a target:
 
@@ -664,7 +669,7 @@ $$Target=\$X$$
 
 with the simulated terminal-value distribution displayed relative to the target.
 
-Risk Profile
+### Risk Profile
 
 Display:
 
@@ -680,7 +685,7 @@ Display:
 
 - Downside-risk measures
 
-16. Recommendation Explanation
+## 16. Recommendation Explanation
 
 The robo-advisor should not simply output portfolio weights.
 
@@ -698,7 +703,7 @@ Because you did not specify a target amount, the optimizer maximizes estimated p
 
 The system should provide the underlying calculations and assumptions so the client can understand how the recommendation was generated.
 
-17. Rebalancing
+## 17. Rebalancing
 
 The robo-advisor should establish a rebalancing rule.
 
@@ -710,7 +715,7 @@ Threshold-based: rebalance whenever an ETF deviates from its target allocation b
 
 When taxes are enabled, the system should incorporate the estimated tax consequences of selling appreciated positions.
 
-18. Ongoing Monitoring
+## 18. Ongoing Monitoring
 
 After the initial recommendation, the system should periodically reassess:
 
@@ -742,89 +747,89 @@ The system should trigger a review when:
 
 - Significant market conditions change the portfolio's risk characteristics
 
-19. Complete User Workflow
+## 19. Complete User Workflow
 
 The complete application flow should therefore be:
 
-Step 1 — Client Profile
+### Step 1 — Client Profile
 
-→ Investment experience
-→ Financial information
-→ Investment horizon
+- Investment experience
+- Financial information
+- Investment horizon
 
-Step 2 — Investment Goal
+### Step 2 — Investment Goal
 
-→ Target amount/date OR no specific target
-→ Initial investment
-→ Monthly contribution
+- Target amount/date OR no specific target
+- Initial investment
+- Monthly contribution
 
-Step 3 — Risk Questionnaire
+### Step 3 — Risk Questionnaire
 
-→ Risk capacity questions
-→ Risk tolerance questions
-→ Capacity score
-→ Tolerance score
-→ Mapped risk score
+- Risk capacity questions
+- Risk tolerance questions
+- Capacity score
+- Tolerance score
+- Mapped risk score
 
-Step 4 — Investment Universe
+### Step 4 — Investment Universe
 
-→ Client selects ETFs from the 20-ETF list
+- Client selects ETFs from the 20-ETF list
 
-Step 5 — Investment Constraints
+### Step 5 — Investment Constraints
 
-→ Short selling allowed?
-→ Taxes considered?
-→ Maximum position size
-→ Optional leverage constraint
+- Short selling allowed?
+- Taxes considered?
+- Maximum position size
+- Optional leverage constraint
 
-Step 6 — Historical Data
+### Step 6 — Historical Data
 
-→ Retrieve historical adjusted total-return data
-→ Use up to 20 years of available data
-→ Estimate returns, volatility, covariance, downside risk, etc.
+- Retrieve historical adjusted total-return data
+- Use up to 20 years of available data
+- Estimate returns, volatility, covariance, downside risk, etc.
 
-Step 7 — Portfolio Optimization
+### Step 7 — Portfolio Optimization
 
-→ Target specified: minimize risk subject to target requirement
-→ No target: maximize return subject to mapped risk constraint
+- Target specified: minimize risk subject to target requirement
+- No target: maximize return subject to mapped risk constraint
 
-Step 8 — Recommended Portfolio
+### Step 8 — Recommended Portfolio
 
-→ ETF weights
-→ Dollar allocations
-→ Monthly contribution allocation
-→ Expected return
-→ Expected volatility
-→ Downside risk
+- ETF weights
+- Dollar allocations
+- Monthly contribution allocation
+- Expected return
+- Expected volatility
+- Downside risk
 
-Step 9 — Financial Simulation
+### Step 9 — Financial Simulation
 
-→ Monte Carlo simulation
-→ Projected wealth distribution
-→ Target-achievement probability
-→ Drawdown analysis
+- Monte Carlo simulation
+- Projected wealth distribution
+- Target-achievement probability
+- Drawdown analysis
 
-Step 10 — Benchmark Comparison
+### Step 10 — Benchmark Comparison
 
-→ Compare with S&P 500 over the most recent 10 years
-→ Same initial investment and monthly contributions
-→ Compare return, volatility, drawdown, Sharpe ratio, and ending wealth
+- Compare with S&P 500 over the most recent 10 years
+- Same initial investment and monthly contributions
+- Compare return, volatility, drawdown, Sharpe ratio, and ending wealth
 
-Step 11 — Client Report
+### Step 11 — Client Report
 
-→ Recommended allocation
-→ Risk profile
-→ Financial projection
-→ Benchmark comparison
-→ Explanation of optimization methodology
-→ Assumptions and limitations
+- Recommended allocation
+- Risk profile
+- Financial projection
+- Benchmark comparison
+- Explanation of optimization methodology
+- Assumptions and limitations
 
-Step 12 — Ongoing Monitoring
+### Step 12 — Ongoing Monitoring
 
-→ Track progress
-→ Recalculate when client circumstances or portfolio characteristics change
+- Track progress
+- Recalculate when client circumstances or portfolio characteristics change
 
-20. Key Design Principle
+## 20. Key Design Principle
 
 The robo-advisor should separate three concepts that are often incorrectly combined:
 
@@ -838,11 +843,11 @@ The risk questionnaire determines how much risk the client can reasonably take, 
 
 Thus:
 
-Target-based client
+### Target-based client
 
 $$Minimize Risk subject to achieving the target$$
 
-No-target client
+### No-target client
 
 $$Maximize Expected Return subject to allowable risk$$
 

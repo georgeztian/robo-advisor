@@ -13,8 +13,7 @@ The work is done by a graph of cooperating **agents**. An **independent reviewer
 re-checks the data and the calculations, and checks every rule of the specification, before
 a report is produced.
 
-- Original specification: [`robo-advisor.docx`](robo-advisor.docx), extracted with its
-  equations to [`docs/SPEC.md`](docs/SPEC.md).
+- Original specification, with its equations: [`docs/SPEC.md`](docs/SPEC.md).
 - Technical design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 > Results are model estimates based on historical data, not guarantees or personalized
@@ -383,8 +382,7 @@ robo_advisor/
   review/                  the independent reviewer (its own code, no production imports)
   cli.py                   the commands above
 tests/                     automated tests (./ra test); tests/fixtures/ holds two test client profiles
-tools/extract_docx.py      extracts the .docx specification, including Word equations
-docs/                      SPEC.md (the extracted specification), ARCHITECTURE.md
+docs/                      SPEC.md (the original specification), ARCHITECTURE.md
 ```
 
 Client folders (`clients/`), the default output folder (`out/`), the data cache and `.venv`
