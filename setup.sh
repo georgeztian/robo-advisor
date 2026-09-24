@@ -46,6 +46,6 @@ echo "Installing robo-advisor and its libraries (this can take a few minutes) ..
   pyproject.toml > .venv/.install-stamp
 echo
 echo "Setup complete. The environment is used automatically by ./ra - no activation needed:"
-echo "  ./ra run --profile examples/client_target.json                         # demo (synthetic data)"
-echo "  ./ra data --provider yahoo                                             # download real prices"
-echo "  ./ra run --profile examples/client_target.json --provider yahoo --as-of today"
+echo "  ./ra data                                                    # download + check real prices"
+echo "  ./ra run --interactive --out clients/<name>                   # enter a client's answers"
+echo "  ./ra run --profile clients/<name>/<name>_profile.json --as-of today --out clients/<name>"

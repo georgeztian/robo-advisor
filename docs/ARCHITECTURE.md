@@ -141,10 +141,10 @@ taxes, missing disclosures and a misreported probability.
   profile file lists tickers and/or category names. There is no implicit "all ETFs" default.
   This list replaces the ETF list in spec §3.
 * **Data providers** (`robo_advisor/data/providers.py`):
-  - `synthetic` (default): deterministic simulated histories, calibrated per ETF; reports are
-    watermarked SYNTHETIC.
-  - `yahoo`: yfinance, normalized to raw prices, repaired, cached, with retries.
+  - `yahoo` (default): yfinance, normalized to raw prices, repaired, cached, with retries.
   - `csv`: your own price files.
+  - `synthetic`: deterministic simulated histories, calibrated per ETF, for offline testing
+    (the test suite uses it); reports are watermarked SYNTHETIC.
   - The risk-free rate can come from FRED (`DTB3`) instead of BIL.
 * **Benchmark.** VOO (S&P 500 total return) is always fetched for the §14 comparison. BIL is
   always fetched as the T-bill proxy, whether or not the client selected them.

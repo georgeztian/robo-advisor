@@ -3,7 +3,7 @@
 # The environment is installed or updated automatically when it is missing, incomplete, or
 # its dependency list (pyproject.toml) changed since the last install, e.g. after `git pull`.
 #
-# Usage: ./ra <command> [options]    e.g.  ./ra run --interactive --provider yahoo
+# Usage: ./ra <command> [options]    e.g.  ./ra run --interactive --out clients/jane
 #        ./ra test                   runs the test suite
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

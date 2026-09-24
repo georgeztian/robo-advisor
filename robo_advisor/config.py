@@ -72,7 +72,7 @@ class UniverseCfg(BaseModel):
 
 
 class DataCfg(BaseModel):
-    provider: Literal["synthetic", "csv", "yahoo"] = "synthetic"
+    provider: Literal["synthetic", "csv", "yahoo"] = "yahoo"
     csv_dir: str = "data/prices"
     cache_dir: str = ".cache/prices"
     lookback_years: int = 20

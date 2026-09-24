@@ -3,7 +3,7 @@ rem Run the robo-advisor inside the project's private environment (.venv).
 rem The environment is installed or updated automatically when it is missing, incomplete, or
 rem its dependency list (pyproject.toml) changed since the last install, e.g. after git pull.
 rem
-rem Usage: .\ra <command> [options]    e.g.  .\ra run --interactive --provider yahoo
+rem Usage: .\ra <command> [options]    e.g.  .\ra run --interactive --out clients\jane
 rem        .\ra test                   runs the test suite
 setlocal
 set "HERE=%~dp0"
