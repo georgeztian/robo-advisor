@@ -124,7 +124,7 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         return np.where(lt, 0.0, gain).sum(axis=1), np.where(lt, gain, 0.0), gain
 
     def settle(month: int, offset_limit: np.ndarray | float | None = None):
-        nonlocal st_acc, lt_acc, lt_rate_acc, inc_tax_acc, carry, V, B, offset_used
+        nonlocal carry, V, B, offset_used     # the *_acc arrays are reset in place
         st, lt = st_acc.copy(), lt_acc.copy()
         # net short- against long-term, then apply carried-forward losses
         off = np.minimum(np.clip(-st, 0, None), np.clip(lt, 0, None))

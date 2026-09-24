@@ -9,8 +9,6 @@ risk_bands:            # mapped risk score -> profile -> max annual volatility (
   - {max_score: 80,  profile: Growth,            max_volatility: 0.17}
   - {max_score: 100, profile: Aggressive,        max_volatility: 0.25}
 
-risk_mapping: min      # "min" = min(capacity, tolerance) (conservative mapping, spec §2C)
-
 questionnaire:
   capacity:            # spec §2A — financial ABILITY to bear losses
     - id: annual_income

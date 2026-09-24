@@ -116,7 +116,8 @@ class OptimizationCfg(BaseModel):
     default_method: Method = "mean_variance"
     max_position: float = Field(0.5, gt=0, le=1)
     max_gross_leverage: float = Field(1.5, ge=1)
-    category_limits: dict[str, float] = {}       # max share of the portfolio per ETF category
+    category_limits: dict[str, float] = {        # max share of the portfolio per ETF category
+        "Crypto ETFs": 0.05, "Income ETFs": 0.25, "Commodity ETFs": 0.20, "Real Estate ETFs": 0.20}
     n_starts: int = 6
     tolerance: float = 1e-4
     cvar_alpha: float = 0.95
@@ -185,7 +186,6 @@ class ReviewCfg(BaseModel):
 
 class Settings(BaseModel):
     risk_bands: list[RiskBand]
-    risk_mapping: Literal["min"] = "min"
     questionnaire: Questionnaire
     universe: UniverseCfg
     data: DataCfg = DataCfg()

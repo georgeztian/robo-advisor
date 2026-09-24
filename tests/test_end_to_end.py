@@ -6,7 +6,6 @@ from conftest import FIXTURES, load_client
 from robo_advisor.agents.advisory import build_advisory_graph
 from robo_advisor.agents.monitor import build_monitoring_graph
 from robo_advisor.cli import main
-from robo_advisor.graph.engine import GraphHalted
 from robo_advisor.report.html import audit_bundle, render
 
 

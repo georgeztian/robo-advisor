@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from conftest import AS_OF
-from robo_advisor.data.providers import CSVProvider, SyntheticProvider
+from robo_advisor.data.providers import CSVProvider
 from robo_advisor.data.validation import validate
 from robo_advisor.estimation import estimate
 from robo_advisor.models import TaxInput

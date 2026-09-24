@@ -141,7 +141,7 @@ def _verify(opt, best, frontier, model, W0, C, T, target, p, rebal, tax, paths, 
         return {**best, "prob": pb, "exp_terminal": eb}, pb
     higher = sorted((e for e in frontier if e["target_return"] > best["target_return"]),
                     key=lambda e: e["target_return"])
-    lo_r, lo = best["target_return"], None
+    lo_r = best["target_return"]
     for e in higher:
         pe, ee = prob(e["w"])
         if pe >= p:

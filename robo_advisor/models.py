@@ -334,6 +334,8 @@ class Request:
     target_probability: float
     goal_risk_metric: str
     data_tickers: list[str]          # selected + benchmark + risk-free proxy
+    held_not_selected: list[str] = field(default_factory=list)   # monitoring: prior holdings the
+                                                                   # updated profile no longer selects
 
 
 @dataclass

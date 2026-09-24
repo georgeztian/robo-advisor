@@ -27,8 +27,17 @@ if /i "%~1"=="test" goto :test
 exit /b %ERRORLEVEL%
 
 :test
+rem pass any arguments after "test" through to pytest
+set "ARGS="
+shift
+:collect
+if "%~1"=="" goto :pytest
+set ARGS=%ARGS% %1
+shift
+goto :collect
+:pytest
 pushd "%HERE%"
-"%VENV%\Scripts\python.exe" -m pytest -q
+"%VENV%\Scripts\python.exe" -m pytest -q %ARGS%
 set "RC=%ERRORLEVEL%"
 popd
 exit /b %RC%

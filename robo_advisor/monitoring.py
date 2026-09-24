@@ -8,7 +8,8 @@ questionnaire/goal and fresh market data, and raises review triggers when:
   * the portfolio exceeds the risk limit,
   * market conditions materially change the portfolio's risk characteristics
     (portfolio volatility or asset correlations shift),
-  * the client's questionnaire responses change the mapped risk profile.
+  * the client's questionnaire responses change the mapped risk profile,
+  * the updated ETF selection drops ETFs the portfolio still holds (they keep being evaluated).
 
 Convention: in the updated client input, ``goal.initial_investment`` is the CURRENT
 portfolio value.
@@ -50,7 +51,8 @@ def assess(prior: dict, req: Request, risk: RiskAssessment, est: Estimates, rate
     trig: list[Trigger] = []
     pw = prior["portfolio"]["weights"]
     w = np.array([pw.get(t, 0.0) for t in est.tickers])
-    missing = [t for t, x in pw.items() if abs(x) > 1e-9 and t not in est.tickers]
+    missing = list(req.held_not_selected) + [t for t, x in pw.items()
+                                             if abs(x) > 1e-9 and t not in est.tickers]
     if missing:
         trig.append(Trigger("UNIVERSE_CHANGED", f"previously held ETFs no longer selected: {missing}"))
     m: dict[str, Any] = {}
@@ -117,7 +119,8 @@ def assess(prior: dict, req: Request, risk: RiskAssessment, est: Estimates, rate
     m["remaining_months"] = req.months
     if req.has_target and req.target:
         model = MCModel.from_estimates(est, settings.simulation.distribution)
-        raw = simulate(w / w.sum() if abs(w.sum() - 1) > 1e-9 else w, model, req.W0, req.C, req.months,
+        ws = w / w.sum() if abs(w.sum()) > 1e-9 and abs(w.sum() - 1) > 1e-9 else w
+        raw = simulate(ws, model, req.W0, req.C, req.months,
                        req.rebalancing, rates, 5000, settings.simulation.seed, record=False)
         term = raw.terminal_after_liq if raw.terminal_after_liq is not None else raw.terminal
         p = float((term >= req.target).mean())

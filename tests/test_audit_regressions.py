@@ -145,3 +145,73 @@ def test_remediated_review_counts_as_passed():
     good = ReviewReport("portfolio", [ReviewFinding("R", "§", "BLOCKER", True, "x")])
     r = RunResult({}, [], [bad, good])
     assert r.latest_reviews() == [good] and r.superseded_reviews() == [bad]
+
+
+# ---------------------------------------------------------------- second audit (CLI / monitoring)
+
+def _cli(args, tmp_path):
+    from robo_advisor.cli import main
+    cfg = tmp_path / "fast.yaml"
+    cfg.write_text("simulation: {n_paths: 800}\nscenarios: {n_paths: 300}\n"
+                   "optimization: {goal: {search_paths: 300, frontier_points: 6}}\nreview: {mc_paths: 800}\n",
+                   encoding="utf-8")
+    return main(args + ["--config", str(cfg), "--provider", "synthetic"])
+
+
+def test_halted_run_keeps_last_good_audit_and_monitor_rejects_halt_record(tmp_path):
+    import json
+    from conftest import FIXTURES
+    out = tmp_path / "c"
+    assert _cli(["run", "--profile", str(FIXTURES / "client_target.json"), "--out", str(out),
+                 "--as-of", "2026-09-23"], tmp_path) == 0
+    good = (out / "alex_target_audit.json").read_text(encoding="utf-8")
+    bad = json.loads((FIXTURES / "client_target.json").read_text(encoding="utf-8"))
+    bad["universe"] = ["IBIT", "BND"]                     # IBIT has no history on this date -> halt
+    (tmp_path / "bad.json").write_text(json.dumps(bad), encoding="utf-8")
+    assert _cli(["run", "--profile", str(tmp_path / "bad.json"), "--out", str(out),
+                 "--as-of", "2024-03-01"], tmp_path) == 2
+    assert (out / "alex_target_audit.json").read_text(encoding="utf-8") == good
+    assert (out / "alex_target_halted.json").exists()
+    assert _cli(["monitor", "--prior", str(out / "alex_target_halted.json")], tmp_path) == 2
+
+
+def test_monitor_evaluates_holdings_dropped_from_the_selection(settings, provider, target_run):
+    import json
+    from conftest import load_client
+    from robo_advisor.agents.monitor import build_monitoring_graph
+    from robo_advisor.report.html import audit_bundle
+    prior = json.loads(json.dumps(audit_bundle(target_run)))
+    held = [t for t, w in prior["portfolio"]["weights"].items() if w > 1e-6]
+    others = [t for t in settings.universe.tickers if t not in held][:4] + ["BIL"]
+    c = load_client("client_target.json", universe=[t for t in others if t not in held] or ["SGOV"])
+    rep = build_monitoring_graph(settings, provider).run({"client": c, "prior": prior}).state["monitoring"]
+    codes = {t.code for t in rep.triggers}
+    assert "UNIVERSE_CHANGED" in codes and "VOLATILITY_SHIFT" not in codes
+    assert rep.metrics["portfolio_volatility"]["now_target_weights"] > 0.01
+
+
+def test_goal_text_names_the_chosen_method(settings, provider):
+    from conftest import load_client
+    c = load_client("client_no_target.json")
+    c = c.model_copy(update={"preferences": c.preferences.model_copy(update={"optimization_method": "max_sharpe"})})
+    ex = build_advisory_graph(settings, provider).run({"client": c}).state["explanation"]
+    assert "max sharpe" in ex.goal_text and "maximizes estimated portfolio return" not in ex.goal_text
+
+
+def test_category_limit_names_are_case_insensitive(settings, provider):
+    from conftest import load_client
+    c = load_client("client_target.json", universe=["Bond ETFs", "Commodity ETFs", "SPY"])
+    c = c.model_copy(update={"constraints": c.constraints.model_copy(update={"category_limits": {"commodity etfs": 0.1}})})
+    res = build_advisory_graph(settings, provider).run({"client": c})
+    assert {cc.category: cc.limit for cc in res.state["constraints"].category_caps} == {"Commodity ETFs": 0.1}
+
+
+def test_data_rejects_unknown_tickers(tmp_path):
+    assert _cli(["data", "--tickers", "FOO"], tmp_path) == 2
+
+
+def test_interactive_validates_each_answer(monkeypatch):
+    from robo_advisor.cli import _fraction, _rate
+    answers = iter(["30", "0.3", "24", "0.24"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert _fraction("max position", 0.5) == 0.3 and _rate("tax", 0.2) == 0.24

@@ -10,7 +10,6 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-import numpy as np
 import pandas as pd
 
 from .. import benchmark as bm
@@ -189,11 +188,13 @@ class ConstraintAgent:
         req, risk = st["request"], st["risk"]
         s = self.sv.settings
         c, o = req.client.constraints, s.optimization
-        unknown = set(c.category_limits or {}) - set(s.universe.categories)
+        by_lower = {cat.lower(): cat for cat in s.universe.categories}     # names are case-insensitive
+        unknown = [k for k in (c.category_limits or {}) if k.strip().lower() not in by_lower]
         if unknown:
             raise ValueError(f"category_limits names unknown categories {sorted(unknown)}; "
                              f"categories are: {', '.join(s.universe.categories)}")
-        limits = {**o.category_limits, **(c.category_limits or {})}
+        client_limits = {by_lower[k.strip().lower()]: v for k, v in (c.category_limits or {}).items()}
+        limits = {**o.category_limits, **client_limits}
         caps = [CategoryCap(cat, lim, [t for t in tickers if t in req.tickers])
                 for cat, tickers in s.universe.categories.items()
                 if (lim := limits.get(cat, 1.0)) < 1.0 and any(t in req.tickers for t in tickers)]

@@ -218,7 +218,7 @@ class Graph:
                 state.pop("remediation", None)
                 return
             if attempt >= gate.max_retries or not gate.remediate:
-                raise GraphHalted(f"{gate.name}: " + "; ".join(f.message for f in rep.blocking),
+                raise GraphHalted("; ".join(f"[{f.rule_id}] {f.message}" for f in rep.blocking),
                                   gate.name, rep, result)
             attempt += 1
             state["remediation"] = {"gate": gate.name, "attempt": attempt,
