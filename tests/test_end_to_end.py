@@ -19,6 +19,9 @@ def test_target_client_workflow(target_run, settings):
     assert set(port.tickers) == set(req.tickers)
     assert sim.n_paths == settings.simulation.n_paths
     html = render(target_run, settings, "flowchart TD")
+    assert "<h1>Robo-Advisor Recommendation</h1>" in html and "Your Robo-Advisor" not in html
+    from robo_advisor.explain import REPORT_DISCLAIMER
+    assert html.rstrip().endswith("</html>") and html.rindex(REPORT_DISCLAIMER) > html.rindex("Independent review")
     for s in ("Probability of reaching $500,000", "S&amp;P 500 comparison", "Independent review passed",
               "SYNTHETIC DATA", "Risk capacity", "Scenario analysis (not forecasts)"):
         assert s in html

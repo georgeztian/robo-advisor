@@ -266,6 +266,8 @@ From top to bottom:
 - **How it was made:** methodology, assumptions, limitations, and disclosures (including the
   special-risk ETF notes).
 - **Independent review:** every rule the reviewer checked, and the agent workflow trace.
+- **Disclaimer:** the outputs are informational only, not financial, investment, legal or
+  trading advice.
 
 Optional run flags:
 - `--risk-free fred` uses the official 3-month T-bill rate for the risk-free rate.
