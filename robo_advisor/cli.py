@@ -1,16 +1,18 @@
-"""Command-line interface.
+"""Command-line interface (run it through the ./ra or .\\ra launcher).
 
-    robo-advisor run --profile examples/client_target.json [--out out/]
-    robo-advisor run --interactive
-    robo-advisor monitor --prior out/<name>_audit.json --profile updated.json
-    robo-advisor graph [--monitoring]
-    robo-advisor questionnaire
+    run --interactive | --profile FILE   produce a recommendation (report + audit + profile)
+    data                                 download and validate market data only
+    monitor --prior AUDIT [--profile F]  re-assess an earlier recommendation
+    etfs                                 print the ETF menu by category
+    questionnaire                        print the risk questions and allowed answers
+    graph [--monitoring]                 print the agent workflow graph (mermaid)
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -23,6 +25,7 @@ from .data.validation import validate
 from .graph.engine import GraphHalted
 from .models import ClientInput
 from .optimization.methods import METHODS
+from .universe import CATALOG
 from .report.html import audit_bundle, render
 
 
@@ -80,6 +83,45 @@ def _yes(prompt: str, default: bool) -> bool:
     return _ask(prompt + " (y/n)", "y" if default else "n", str.lower, ["y", "n", "yes", "no"]).startswith("y")
 
 
+def _etf_line(i: int, t: str) -> str:
+    info = CATALOG[t]
+    flag = "  [special risk]" if info.risk_note else ""
+    return f"   {i}. {t:<5} {info.name} (since {info.inception.year}, fee {info.expense_ratio:.2%}){flag}"
+
+
+def choose_etfs(s: Settings) -> list[str]:
+    """Step 4: the client picks ETFs category by category."""
+    cats = s.universe.categories
+    print(f"\n== Step 4: Investment universe ({len(s.universe.tickers)} ETFs in {len(cats)} categories) ==")
+    print("For each category, type the numbers of the ETFs to include (e.g. 1,3), 'all' for the whole "
+          "category, or press Enter to skip it.")
+    while True:
+        chosen: list[str] = []
+        for cat, tickers in cats.items():
+            print(f"\n{cat}")
+            for i, t in enumerate(tickers, 1):
+                print(_etf_line(i, t))
+            while True:
+                raw = input("  include: ").strip().lower()
+                if not raw:
+                    break
+                if raw == "all":
+                    chosen += tickers
+                    break
+                try:
+                    picks = [int(x) for x in raw.replace(" ", "").split(",") if x]
+                except ValueError:
+                    picks = []
+                if picks and all(1 <= k <= len(tickers) for k in picks):
+                    chosen += [tickers[k - 1] for k in picks if tickers[k - 1] not in chosen]
+                    break
+                print(f"  enter numbers between 1 and {len(tickers)} separated by commas, 'all', or Enter")
+        if chosen:
+            print("\nSelected: " + ", ".join(chosen))
+            return chosen
+        print("\nSelect at least one ETF.")
+
+
 def interactive_client(s: Settings) -> ClientInput:
     print("\n== Step 1-2: Investment goal ==")
     name = _ask("Your name", "Client")
@@ -109,10 +151,7 @@ def interactive_client(s: Settings) -> ClientInput:
 
     cap = block(s.questionnaire.capacity, "Risk capacity (financial ability to bear losses)", True)
     tol = block(s.questionnaire.tolerance, "Risk tolerance (willingness to bear losses)", False)
-    print("\n== Step 4: Investment universe ==")
-    print("Available ETFs: " + ", ".join(s.universe.default))
-    raw = _ask("ETFs to allow (comma-separated, blank = all)", "")
-    universe = [t.strip().upper() for t in raw.split(",") if t.strip()] or None
+    universe = choose_etfs(s)
     print("\n== Step 5: Constraints ==")
     allow_short = _yes("Are short sales allowed?", False)
     cons = {"allow_short": allow_short,
@@ -130,7 +169,9 @@ def interactive_client(s: Settings) -> ClientInput:
     prefs = {}
     if not has_target:
         prefs["optimization_method"] = _ask("Optimization method", s.optimization.default_method,
-                                            choices=[m for m in METHODS if m != "target_return"])
+                                            choices=list(METHODS))
+        if prefs["optimization_method"] == "target_return":
+            prefs["target_return"] = _ask("Target annual return (e.g. 0.06 for 6%)", cast=float)
     return ClientInput.model_validate({"profile": {"name": name}, "goal": goal, "capacity_answers": cap,
                                        "tolerance_answers": tol, "universe": universe, "constraints": cons,
                                        "taxes": taxes, "preferences": prefs})
@@ -154,10 +195,6 @@ def cmd_run(args) -> int:
         print(f"\nSaved your answers to {saved} (rerun with --profile {saved})")
     try:
         res = graph.run({"client": client}, parallel=not args.sequential)
-    except DataUnavailableError as e:
-        print(f"\nMARKET DATA UNAVAILABLE: {e}\nCheck your internet connection (Yahoo Finance must be "
-              "reachable), then retry; cached tickers are reused.", file=sys.stderr)
-        return 3
     except GraphHalted as e:
         print(f"\nWORKFLOW HALTED at {e.node}: {e}", file=sys.stderr)
         audit = {"halted_at": e.node, "reason": str(e),
@@ -213,15 +250,11 @@ def cmd_data(args) -> int:
         start = as_of.replace(year=as_of.year - s.data.lookback_years)
     except ValueError:
         start = as_of.replace(year=as_of.year - s.data.lookback_years, day=28)
-    tickers = [t.upper() for t in args.tickers] if args.tickers else list(s.universe.default)
+    tickers = [t.upper() for t in args.tickers] if args.tickers else list(s.universe.tickers)
     tickers = sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker})
     prov = _provider(s)
     print(f"Fetching {len(tickers)} tickers from {prov.name} ({start} to {as_of}) ...")
-    try:
-        frames = prov.fetch(tickers, start, as_of)
-    except DataUnavailableError as e:
-        print(f"MARKET DATA UNAVAILABLE: {e}", file=sys.stderr)
-        return 3
+    frames = prov.fetch(tickers, start, as_of)
     dq = validate(frames, start, as_of, s.data)
     dq.warnings.extend(getattr(prov, "notes", []))
     print(f"\n{'ETF':<6}{'first':>12}{'last':>12}{'years':>7}{'missing':>9}{'splits':>8}{'dists':>7}"
@@ -251,6 +284,19 @@ def cmd_graph(args) -> int:
     g = (build_monitoring_graph if args.monitoring else build_advisory_graph)(s, make_provider("synthetic"))
     print(g.to_mermaid())
     print("\n%% execution waves: " + " | ".join(", ".join(w) for w in g.waves()))
+    return 0
+
+
+def cmd_etfs(args) -> int:
+    """Print the ETF menu (categories) for filling in a profile's "universe"."""
+    s = load_settings(getattr(args, "config", None))
+    print(f"{len(s.universe.tickers)} ETFs in {len(s.universe.categories)} categories. In a profile, list tickers "
+          "and/or whole category names under \"universe\".")
+    for cat, tickers in s.universe.categories.items():
+        print(f"\n{cat}")
+        for i, t in enumerate(tickers, 1):
+            print(_etf_line(i, t))
+    print("\n[special risk] = leveraged, option-income or crypto ETF; its risks are disclosed in the report.")
     return 0
 
 
@@ -288,13 +334,32 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("--monitoring", action="store_true")
     q = sub.add_parser("questionnaire", help="print the configured questionnaire")
     q.add_argument("--config")
+    e = sub.add_parser("etfs", help="print the ETF menu by category")
+    e.add_argument("--config")
     args = ap.parse_args(argv)
     # never crash on a console that cannot display a character (e.g. legacy Windows code pages)
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
-    return {"run": cmd_run, "monitor": cmd_monitor, "data": cmd_data, "graph": cmd_graph,
-            "questionnaire": cmd_questionnaire}[args.cmd](args)
+    command = {"run": cmd_run, "monitor": cmd_monitor, "data": cmd_data, "graph": cmd_graph,
+               "questionnaire": cmd_questionnaire, "etfs": cmd_etfs}[args.cmd]
+    if os.environ.get("ROBO_ADVISOR_DEBUG"):
+        return command(args)
+    try:
+        return command(args)
+    except BrokenPipeError:                   # output piped into e.g. `head` / `more` that closed early
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
+    except DataUnavailableError as e:
+        print(f"\nMARKET DATA UNAVAILABLE: {e}\nCheck your internet connection (Yahoo Finance must be "
+              "reachable), then retry; tickers already downloaded are reused.", file=sys.stderr)
+        return 3
+    except FileNotFoundError as e:
+        print(f"\nFILE NOT FOUND: {e.filename or e}", file=sys.stderr)
+        return 2
+    except ValueError as e:                   # invalid profile, answers, ETF choice, infeasible limits
+        print(f"\nINPUT PROBLEM: {e}\n(set ROBO_ADVISOR_DEBUG=1 to see the full traceback)", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 """Independent reviewer agent.
 
-Validates data and computations and checks that the spec's rules are followed, at three
+Validates data and computations and checks that the spec's rules are followed, at four
 checkpoints of the advisory graph:
 
-    inputs     after data validation / estimation / risk profiling
+    data       after data validation, before estimation (look-ahead, coverage, consistency)
+    inputs     after estimation / tax adjustment / risk profiling
     portfolio  after optimization (can trigger optimizer remediation)
     final      after simulation, scenarios, benchmark, projection and explanation
 
@@ -21,7 +22,7 @@ import pandas as pd
 
 from ..config import Settings
 from ..models import ReviewFinding, ReviewReport
-from ..universe import CATALOG
+from ..universe import CATALOG, RISK_NOTE_PREFIX
 from . import independent as ind
 
 REQUIRED_BENCH_METRICS = [
@@ -60,10 +61,10 @@ class Reviewer:
         out: list[ReviewFinding] = []
         f = self._f
         req, market, dq = st["request"], st["market"], st["data_quality"]
-        # universe (spec §3)
-        allowed = set(self.s.universe.default) | set(self.s.universe.optional_extra)
+        # universe: only ETFs offered in the configured categories
+        allowed = set(self.s.universe.tickers)
         f(out, "R-UNIV-01", "§3", "BLOCKER", set(req.tickers) <= allowed and set(req.tickers) <= set(market.frames),
-          f"optimizer universe {req.tickers} is the client's selection within the allowed universe")
+          f"optimizer universe {req.tickers} is the client's selection from the offered ETF categories")
         # data (spec §3, §6)
         late = {t: str(df.index[-1].date()) for t, df in market.frames.items()
                 if len(df) and df.index[-1].date() > req.as_of}
@@ -408,11 +409,11 @@ class Reviewer:
               "tax module presented as an estimated model, not individualized tax advice")
         if market.synthetic:
             f(out, "R-EXP-05", "data", "BLOCKER", "SYNTHETIC" in disc, "synthetic data watermark present")
-        lev = [t for t, x in zip(port.tickers, port.weights) if abs(x) > 1e-6 and CATALOG[t].leveraged]
-        if lev:
+        special = [t for t, x in zip(port.tickers, port.weights) if abs(x) > 1e-6 and CATALOG[t].risk_note]
+        if special:
             f(out, "R-EXP-07", "§16", "BLOCKER",
-              all(any(d.startswith("LEVERAGED ETF:") and t in d for d in exp.disclosures) for t in lev),
-              f"leveraged-ETF risk disclosed for {', '.join(lev)}")
+              all(any(d.startswith(f"{RISK_NOTE_PREFIX} {t} ") for d in exp.disclosures) for t in special),
+              f"special risks disclosed for held {', '.join(special)} (leveraged / option-income / crypto)")
         f(out, "R-EXP-06", "§16", "BLOCKER", bool(exp.methodology and exp.assumptions and exp.limitations
                                                   and exp.calculations),
           "methodology, assumptions, limitations and underlying calculations provided")

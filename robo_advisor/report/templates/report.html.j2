@@ -119,9 +119,13 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
   {% for n in port.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
   {{ alloc_chart|safe }}
   <div class="scroll"><table>
-    <tr><th>ETF</th><th>Asset class</th><th class="num">Weight</th><th class="num">Initial</th><th class="num">Monthly</th><th class="num">Est. return</th><th class="num">Volatility</th><th class="num">Risk contrib.</th><th>Why</th></tr>
-    {% for t, r in held_rows %}<tr><td><b>{{ t }}</b></td><td>{{ r["Asset class"] }}</td><td class="num">{{ "%.1f%%"|format(r.Weight*100) }}</td><td class="num">{{ money(r.Initial) }}</td><td class="num">{{ money(r.Monthly) }}</td><td class="num">{{ "%.1f%%"|format(r["Est. return"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r.Volatility*100) }}</td><td class="num">{{ "%.0f%%"|format(r["Risk contribution"]*100) }}</td><td>{{ r.Rationale }}</td></tr>{% endfor %}
+    <tr><th>ETF</th><th>Category</th><th class="num">Weight</th><th class="num">Initial</th><th class="num">Monthly</th><th class="num">Est. return</th><th class="num">Volatility</th><th class="num">Risk contrib.</th><th>Why</th></tr>
+    {% for t, r in held_rows %}<tr><td><b>{{ t }}</b><br><span class="sub">{{ r.Name }}</span></td><td>{{ r.Category }}<br><span class="sub">{{ r["Asset class"] }}</span></td><td class="num">{{ "%.1f%%"|format(r.Weight*100) }}</td><td class="num">{{ money(r.Initial) }}</td><td class="num">{{ money(r.Monthly) }}</td><td class="num">{{ "%.1f%%"|format(r["Est. return"]*100) }}</td><td class="num">{{ "%.1f%%"|format(r.Volatility*100) }}</td><td class="num">{{ "%.0f%%"|format(r["Risk contribution"]*100) }}</td><td>{{ r.Rationale }}</td></tr>{% endfor %}
     <tr class="total"><td>Total</td><td></td><td class="num">{{ "%.1f%%"|format(weight_total*100) }}</td><td class="num">{{ money(W0) }}</td><td class="num">{{ money(C) }}</td><td class="num">{{ "%.1f%%"|format(port.expected_return*100) }}</td><td class="num">{{ "%.1f%%"|format(port.volatility*100) }}</td><td class="num">100%</td><td></td></tr>
+  </table></div>
+  <h3>Allocation by category</h3>
+  <div class="scroll"><table><tr><th>Category</th><th>ETFs held</th><th class="num">Weight</th><th class="num">Initial</th><th class="num">Monthly</th></tr>
+  {% for c in category_rows %}<tr><td>{{ c.name }}</td><td>{{ c.tickers }}</td><td class="num">{{ "%.1f%%"|format(c.weight*100) }}</td><td class="num">{{ money(c.initial) }}</td><td class="num">{{ money(c.monthly) }}</td></tr>{% endfor %}
   </table></div>
   {% if unheld_rows %}<details><summary>ETFs considered but not held ({{ unheld_rows|length }})</summary><div class="scroll"><table>
     <tr><th>ETF</th><th class="num">Est. return</th><th class="num">Volatility</th><th class="num">History</th><th>Why not</th></tr>
@@ -196,7 +200,7 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
 
 <section>
   <h2>Independent review</h2>
-  <p class="sub">A separate reviewer agent recomputed key figures with its own code and checked each rule of the specification at three checkpoints.</p>
+  <p class="sub">A separate reviewer agent recomputed key figures with its own code and checked each rule of the specification at four checkpoints: data, inputs, portfolio and final.</p>
   {% for rep in reviews %}
   <details {{ 'open' if not rep.ok }}><summary>{{ rep.summary() }}</summary><div class="scroll"><table>
     <tr><th>Rule</th><th>Spec</th><th>Severity</th><th>Status</th><th>Check</th></tr>

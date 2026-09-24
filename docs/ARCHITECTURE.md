@@ -1,9 +1,10 @@
 # Architecture
 
 The robo-advisor is a set of single-responsibility **agents** connected by a typed
-**workflow graph**. An **independent reviewer agent** sits at three gates in that graph. The
-full requirements, extracted from `robo-advisor.docx` with all Word equations converted to
-LaTeX, are in [`SPEC.md`](SPEC.md).
+**workflow graph**. An **independent reviewer agent** sits at four gates in that graph. The
+original requirements, extracted from `robo-advisor.docx` with all Word equations converted to
+LaTeX, are in [`SPEC.md`](SPEC.md). How to install and run the app is in the
+[README](../README.md).
 
 ## Advisory graph
 
@@ -26,7 +27,7 @@ flowchart TD
   G3 --> report([HTML dashboard + audit.json])
 ```
 
-`robo-advisor graph` prints the complete, contract-derived graph, with one edge per blackboard key.
+`./ra graph` prints the complete, contract-derived graph, with one edge per blackboard key.
 
 Execution waves (nodes within a wave run concurrently):
 
@@ -66,7 +67,7 @@ Execution waves (nodes within a wave run concurrently):
 
 | Agent | Spec | Responsibility |
 |---|---|---|
-| intake | §1, §19 steps 1–2, 5 | Validate the input; normalize goal, universe, method and rebalancing |
+| intake | §1, §3, §19 steps 1–2, 4–5 | Validate the input; resolve the client's ETF choice (tickers and/or categories); normalize goal, method and rebalancing |
 | risk_profiler | §2 | Capacity and tolerance scored **separately**; mapped = min; band → σ_max |
 | market_data | §3, §6 | Fetch selected ETFs + VOO (benchmark) + BIL (risk-free), truncated at the as-of date |
 | data_validation | §3 | Inception, 20-year coverage, gaps, split/distribution-consistent adjusted prices, expense ratios |
@@ -106,15 +107,47 @@ with evidence. The rule families:
 | data | R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, blocking validation findings, independent adjusted-price consistency, expense ratios) |
 | inputs | R-RISK (scores, min-mapping, band), R-EST (coverage, μ, σ, PSD Σ), R-TAX, R-CON |
 | portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
-| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, leveraged-ETF disclosure) |
+| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held leveraged / option-income / crypto ETFs) |
 
 When remediation fixes a gate, only the **latest** report of each stage decides the verdict.
 Superseded attempts are kept as history in the report and in `audit.json`.
 
-`tests/test_reviewer.py` tampers with real run outputs (weights summing to 1.05, a
-risk-limit breach, look-ahead data, a wrong mapping, altered μ, mismatched benchmark
-contributions, missing disclosures, a misreported probability) and asserts that each one is
-blocked.
+`tests/test_reviewer.py`, `tests/test_audit_regressions.py` and `tests/test_universe.py`
+tamper with real run outputs and assert that each change is blocked. The tampering covers:
+weights summing to 1.05, a risk-limit breach, look-ahead data, a wrong risk mapping, altered μ,
+a sub-optimal or non-minimal-risk portfolio, wrong benchmark wealth or contributions, missing
+taxes, missing disclosures and a misreported probability.
+
+## ETF universe and data
+
+* **Universe.** 25 ETFs in 9 categories, defined in `config/default.yaml` (`universe.categories`):
+
+  | Category | ETFs |
+  |---|---|
+  | Equity | SPY, VOO, VTI, QQQ, TQQQ |
+  | Bond | BND, TLT, HYG |
+  | Risk-free Short-term Treasury | BIL, SGOV |
+  | Commodity | GLD, SLV |
+  | International Equity | VXUS, IEFA, VWO |
+  | Real Estate | VNQ, SCHH |
+  | Dividend | SCHD, VYM, DGRO |
+  | Income | SPYI, QQQI, JEPQ, JEPI |
+  | Crypto | IBIT |
+
+  `robo_advisor/universe.py` holds each ETF's facts: inception date, expense ratio, tax
+  character of its distributions, collectible status (GLD, SLV), and a special-risk note
+  (TQQQ, the four income ETFs, IBIT). The config is validated against the catalog. Clients
+  choose ETFs by category: the interactive questionnaire goes category by category, and a
+  profile file lists tickers and/or category names. There is no implicit "all ETFs" default.
+  This list replaces the ETF list in spec §3.
+* **Data providers** (`robo_advisor/data/providers.py`):
+  - `synthetic` (default): deterministic simulated histories, calibrated per ETF; reports are
+    watermarked SYNTHETIC.
+  - `yahoo`: yfinance, normalized to raw prices, repaired, cached, with retries.
+  - `csv`: your own price files.
+  - The risk-free rate can come from FRED (`DTB3`) instead of BIL.
+* **Benchmark.** VOO (S&P 500 total return) is always fetched for the §14 comparison. BIL is
+  always fetched as the T-bill proxy, whether or not the client selected them.
 
 ## Key modelling decisions
 
@@ -151,5 +184,7 @@ blocked.
   - The bootstrap resamples only months in which every selected ETF has data.
   - Selling to pay taxes does not itself realize gains.
   - The reviewer's tax check is a lower bound (distribution taxes), not a full ledger recomputation.
-* **Spec inconsistencies handled.** §19 says "20-ETF list" but §3 lists 16, so the default
-  universe is those 16. The §10 example uses SGOV, which is therefore an optional extra.
+  - Allocations are limited per ETF (`max_position`), not per category. Mean-variance
+    optimization follows historical estimates, so ETFs with short, strong histories (e.g.
+    IBIT, about 2–3 years) can receive large weights. They are disclosed in the report, but
+    the estimates are highly uncertain.

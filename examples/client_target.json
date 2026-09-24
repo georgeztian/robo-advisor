@@ -1,6 +1,5 @@
 {
   "profile": {"name": "Alex Target", "age": 38, "investment_experience": "ETFs for 8 years"},
-  "as_of": "2026-09-23",
   "goal": {
     "has_target": true,
     "target_amount": 500000,

@@ -2,7 +2,7 @@
 
 Each agent is a small, single-responsibility node that reads declared blackboard keys and
 writes its own. The graph engine derives the dependency structure from these contracts,
-runs independent agents in parallel, and places the independent reviewer at three gates.
+runs independent agents in parallel, and places the independent reviewer at four gates.
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class IntakeAgent:
         as_of = last_business_day(client.as_of or dt.date.today())
         if as_of > dt.date.today():
             raise ValueError(f"as_of {as_of} is in the future; market data only exists up to today")
-        tickers = resolve_universe(client.universe, s.universe.default, s.universe.optional_extra)
+        tickers = resolve_universe(client.universe, s.universe.categories)
         pref = client.preferences
         method = pref.optimization_method or s.optimization.default_method
         if method not in METHODS:
@@ -324,7 +324,8 @@ class ExplainerAgent:
         s = self.sv.settings
         exp = explain(st["request"], st["risk"], st["estimates"], st["tax"], st["portfolio"], st["simulation"],
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
-                      st["market"].synthetic, s.simulation.inflation, s.data.lookback_years)
+                      st["market"].synthetic, s.simulation.inflation, s.data.lookback_years,
+                      s.universe.categories)
         prs = portfolio_risk_stats(st["portfolio"].weights, st["estimates"], s.estimation.var_confidence)
         return {"explanation": exp, "portfolio_risk": prs}
 

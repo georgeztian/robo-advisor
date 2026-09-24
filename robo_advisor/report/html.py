@@ -46,6 +46,11 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
     held = [(t, r) for t, r in table.iterrows() if abs(r["Weight"]) > 1e-6]
     unheld = [(t, r) for t, r in table.iterrows() if abs(r["Weight"]) <= 1e-6]
     held.sort(key=lambda x: -abs(x[1]["Weight"]))
+    category_rows = []
+    for cat, grp in table[table["Weight"].abs() > 1e-6].groupby("Category", sort=False):
+        category_rows.append({"name": cat, "tickers": ", ".join(grp.index), "weight": float(grp["Weight"].sum()),
+                              "initial": float(grp["Initial"].sum()), "monthly": float(grp["Monthly"].sum())})
+    category_rows.sort(key=lambda c: -abs(c["weight"]))
 
     alloc = charts.bar_chart_h([t for t, _ in held], [r["Weight"] for _, r in held], charts.pct,
                                "ETF weights", notes=[f"{_money(r['Initial'])} initial, {_money(r['Monthly'])}/month"
@@ -85,7 +90,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         target_date=req.target_date.strftime("%B %Y") if req.target_date else None,
         target_probability=req.target_probability, months=req.months, W0=req.W0, C=req.C,
         taxes=req.client.taxes.enabled, money=_money, method_label=method_label(port.method),
-        held_rows=held, unheld_rows=unheld, weight_total=float(port.weights.sum()),
+        held_rows=held, unheld_rows=unheld, category_rows=category_rows, weight_total=float(port.weights.sum()),
         prisk=st["portfolio_risk"], bands=s.risk_bands if s else [],
         alloc_chart=alloc, risk_chart=risk_chart, fan_chart=fan, hist_chart=hist,
         growth_chart=growth, contrib_chart=contrib, bench_rows=_bench_rows(bench.metrics),
@@ -114,7 +119,8 @@ def _json_default(o: Any):
 def _review_json(r) -> dict:
     return {"stage": r.stage, "ok": r.ok,
             "findings": [{"rule": f.rule_id, "spec": f.spec_ref, "severity": f.severity,
-                          "passed": f.passed, "message": f.message} for f in r.findings]}
+                          "passed": f.passed, "message": f.message, "evidence": f.evidence}
+                         for f in r.findings]}
 
 
 def audit_bundle(result: RunResult) -> dict:
