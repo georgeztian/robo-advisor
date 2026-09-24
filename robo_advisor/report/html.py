@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ..explain import method_label
+from ..explain import REPORT_DISCLAIMER, method_label
 from ..graph.engine import RunResult
 from . import charts
 
@@ -101,7 +101,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         reviews=reviews, superseded=superseded, review_ok=review_ok,
         review_summary=f"{passed}/{n} checks passed" + (
             f" (after {len(superseded)} remediated attempt(s))" if superseded else ""),
-        trace=result.trace, mermaid=mermaid,
+        trace=result.trace, mermaid=mermaid, disclaimer=REPORT_DISCLAIMER,
         calculations=json.dumps(exp.calculations, indent=2, default=_json_default))
     return _ENV.get_template("report.html.j2").render(**ctx)
 
