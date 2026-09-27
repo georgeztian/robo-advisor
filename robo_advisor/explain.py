@@ -7,7 +7,7 @@ import pandas as pd
 
 from .models import (BenchmarkResult, DataQualityReport, Estimates, Explanation, Portfolio, Projection,
                      Request, RiskAssessment, ScenarioResult, SimulationResult, TaxContext)
-from .optimization.methods import METHOD_DESCRIPTIONS, METHOD_LABELS
+from .optimization.methods import METHOD_LABELS, method_descriptions
 from .rebalancing import describe as describe_rebalancing
 from .universe import CATALOG, RISK_NOTE_PREFIX, category_of
 
@@ -25,14 +25,8 @@ REPORT_DISCLAIMER = (
     "conducting your own research and should consult a licensed financial professional before making "
     "any investment choices.")
 
-GOAL_METHOD_LABELS = {
-    "goal_min_volatility": "Target-based: minimize volatility subject to P(terminal wealth >= target) >= p",
-    "goal_min_cvar": "Target-based: minimize CVaR of terminal wealth subject to P(terminal wealth >= target) >= p",
-}
-
-
 def method_label(method: str) -> str:
-    return GOAL_METHOD_LABELS.get(method) or METHOD_LABELS.get(method, method)
+    return METHOD_LABELS.get(method, method)
 
 
 def risk_contributions(w: np.ndarray, cov: np.ndarray) -> np.ndarray:
@@ -93,6 +87,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             sim: SimulationResult, proj: Projection, bench: BenchmarkResult,
             scenarios: list[ScenarioResult], dq: DataQualityReport, synthetic: bool,
             inflation: float, lookback_years: int = 20, min_history_years: float = 20,
+            cvar_alpha: float = 0.95,
             categories: dict[str, list[str]] | None = None) -> Explanation:
     w = port.weights
     mu = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
@@ -155,7 +150,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             how = (f"the optimizer maximizes estimated portfolio return subject to the "
                    f"{risk.max_volatility:.0%} volatility limit implied by your mapped risk profile")
         else:
-            desc = METHOD_DESCRIPTIONS.get(port.method, method_label(port.method))
+            desc = method_descriptions(cvar_alpha).get(port.method, method_label(port.method))
             how = (f"the portfolio was built with the method you chose, {port.method.replace('_', ' ')} "
                    f"({desc[0].lower() + desc[1:]}), within the {risk.max_volatility:.0%} volatility limit "
                    f"implied by your mapped risk profile")
@@ -212,7 +207,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         limitations.append(f"Less than {min_history_years:g} years of history (maximum available used): " + ", ".join(
             f"{t} ({dq.tickers[t].years_available:.1f}y)" for t in short) + ".")
     limitations += [f"Benchmark note: {n}" for n in bench.notes]
-    disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS]   # not-advice: REPORT_DISCLAIMER
+    disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS]   # "not advice" is REPORT_DISCLAIMER's job
     for t, x in zip(est.tickers, w):
         note = CATALOG[t].risk_note
         if note and abs(x) > 1e-6:

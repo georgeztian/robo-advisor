@@ -1,13 +1,16 @@
 """Estimated tax model (spec §5). NOT individualized tax advice.
 
-Two uses:
+Three uses:
 1. ``after_tax_returns``: the after-tax monthly return series the optimizer uses when taxes
    are enabled: income taxed each month at the ETF's income rate (interest / non-qualified
-   at ordinary rates, qualified dividends at the qualified rate), plus an estimated drag from
+   at ordinary rates, qualified dividends at the qualified rate; Treasury interest free of state
+   tax, municipal interest free of federal tax), plus an estimated drag from
    realized gains (assumed turnover x positive price return x capital-gains rate).
 2. ``TaxRates``: per-asset rates consumed by the Monte Carlo tax engine (simulation.py), which
    tracks cost basis, realized short/long-term gains from rebalancing, loss netting,
    carry-forward and the annual ordinary-income offset for net capital losses.
+3. ``tax_schedule`` / ``etf_tax_rates``: the federal / state rates behind both, also shown in the
+   report's per-ETF tax-rate table (``resolve_rates`` is built from them, so they always agree).
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ DISCLAIMER = ("Taxes are an ESTIMATED model based on the rates you supplied and 
 class TaxRates:
     enabled: bool
     income: np.ndarray        # per-asset tax rate on distributions
-    lt: np.ndarray            # per-asset long-term capital-gains rate (collectibles for GLD)
+    lt: np.ndarray            # per-asset long-term capital-gains rate (collectibles rate for GLD, SLV)
     st: float                 # short-term capital-gains rate
     ordinary: float
     loss_offset: float        # annual ordinary-income offset for net capital losses ($)
@@ -48,8 +51,9 @@ SCHEDULE_LABELS = {"ordinary": "Ordinary income (interest, non-qualified dividen
 
 
 def tax_schedule(tax_in: TaxInput, cfg: TaxCfg) -> dict[str, tuple[float, float]]:
-    """(federal, state) rate for each kind of taxable income; all zero when taxes are off. The
-    state rate is one rate applied to every kind of income."""
+    """(federal, state) rate for each kind of taxable income; all zero when taxes are off. One
+    state rate applies to every kind; etf_tax_rates handles the exemptions (Treasury interest
+    is state-exempt, municipal interest federal-exempt)."""
     if not tax_in.enabled:
         return {k: (0.0, 0.0) for k in SCHEDULE_LABELS}
 

@@ -2,7 +2,8 @@
 
 * Daily adjusted (total-return) prices -> risk: volatility, covariance, downside statistics.
 * Monthly total returns -> expected returns (arithmetic, annualized x12) for long horizons.
-* Risk-free rate from a Treasury-bill ETF (BIL) over the same window.
+* Risk-free rate over the same window: the 3-month Treasury bill rate from FRED when requested,
+  otherwise the return of a Treasury-bill ETF (BIL), otherwise a configured fallback.
 * Consistent observation dates: all series aligned on one trading calendar; each ETF uses
   its maximum available history inside the window; pairwise-overlap covariance is repaired
   to the nearest positive semi-definite matrix.

@@ -1,7 +1,7 @@
 """The optimization problem behind a recommendation, written out for the client report: the
 process in steps, the problem in mathematical form with every constraint that was imposed (with
-the client's actual numbers and how the recommended portfolio sits against each one), and the
-same problem in plain English.
+the client's actual numbers and how the recommended portfolio sits against each one), and a
+simple explanation of the same problem.
 
 Math is returned as small HTML fragments (italic symbols, sub/superscripts, Unicode operators) so
 the report renders it offline without a math library. Anything that is not our own markup

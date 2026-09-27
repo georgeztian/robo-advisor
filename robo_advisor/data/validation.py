@@ -1,9 +1,9 @@
 """ETF data validation (spec §3 "ETF Data Validation").
 
-Checks per ticker: inception date, availability of the 20-year window, missing observations,
-trading history, adjusted-price consistency with splits and distributions, expense ratio,
-dividend distributions, and whether the ETF existed throughout the estimation window.
-Short histories are *flagged* and the maximum available history is used.
+Checks per ticker: inception date, history available in the estimation window, missing
+observations and gaps, minimum number of observations, stale or look-ahead data, adjusted-price
+consistency with splits and distributions, expense ratio and distribution yield. Short
+histories are *flagged* and the maximum available history is used.
 """
 from __future__ import annotations
 

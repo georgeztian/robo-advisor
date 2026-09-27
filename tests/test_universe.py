@@ -69,7 +69,7 @@ def test_invalid_universe_config_rejected():
 def test_reviewer_blocks_missing_special_risk_disclosure(settings, no_target_run):
     st = dict(no_target_run.state)
     held = [t for t, w in st["portfolio"].weight_map().items() if w > 1e-6 and CATALOG[t].risk_note]
-    assert held, "example no-target client should hold a special-risk ETF"
+    assert held, "the no-target test client should hold a special-risk ETF"
     ex = st["explanation"]
     st["explanation"] = dataclasses.replace(
         ex, disclosures=[d for d in ex.disclosures if not d.startswith(RISK_NOTE_PREFIX)])
