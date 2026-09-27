@@ -75,6 +75,8 @@ class Reviewer:
         info = CATALOG[t]
         if info.income_type == "interest":
             return ordinary
+        if info.income_type == "treasury":
+            return ordinary - state
         if info.income_type == "tax_exempt":
             return state
         if info.income_type == "none":

@@ -71,7 +71,7 @@ Execution waves (nodes within a wave run concurrently):
 | market_data | §3, §6 | Fetch selected ETFs + VOO (benchmark) + BIL (risk-free), truncated at the as-of date |
 | data_validation | §3 | Inception, 20-year coverage, gaps, split/distribution-consistent adjusted prices, expense ratios |
 | estimation | §6 | μ from monthly total returns; σ and Σ from daily returns (pairwise, PSD-repaired); VaR, CVaR, MDD, β, Sharpe, Sortino |
-| tax_adjust | §5 | After-tax return series (interest / qualified / REIT / collectibles), gain-realization drag |
+| tax_adjust | §5 | After-tax return series by income type (interest, state-exempt Treasury interest, federal-exempt municipal interest, qualified / mixed dividends, REIT income; collectible gains), gain-realization drag |
 | constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; per-ETF lᵢ ≤ wᵢ and \|wᵢ\| ≤ uᵢ (client minimum / maximum, default 0 % / 50 %; a positive minimum forbids shorting); Σ\|wᵢ\| per category ≤ category limit (config defaults + client overrides); σ ≤ σ_max from the mapped profile |
 | optimizer | §7–§9 | Case A: min risk s.t. P(F_T ≥ F\*) ≥ p. Case B: max E[R] s.t. σ ≤ σ_max, or an alternative method |
 | simulation | §12 | 10,000-path Monte Carlo with contributions, rebalancing and taxes |
@@ -134,7 +134,7 @@ taxes, missing disclosures and a misreported probability.
   | Crypto | IBIT |
 
   `robo_advisor/universe.py` holds each ETF's facts: inception date, expense ratio, tax
-  character of its distributions (interest, federally tax-exempt municipal interest for VTEB,
+  character of its distributions (interest, state-tax-exempt Treasury interest, federally tax-exempt municipal interest for VTEB,
   qualified or mixed dividends, REIT income), collectible status (GLD, SLV), and a special-risk
   note (the option-income ETFs, IBIT). The config is validated against the catalog. Clients
   choose ETFs by category: the interactive questionnaire goes category by category, and a

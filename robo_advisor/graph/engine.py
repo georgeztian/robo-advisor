@@ -46,7 +46,6 @@ class Node:
     provides: tuple[str, ...]
     optional: tuple[str, ...] = ()
     kind: Literal["agent", "gate"] = "agent"
-    description: str = ""
     remediate: tuple[str, ...] = ()
     max_retries: int = 0
 

@@ -7,7 +7,8 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Literal
 
-IncomeType = Literal["interest", "tax_exempt", "qualified", "mixed", "reit", "none"]
+IncomeType = Literal["interest", "treasury", "tax_exempt", "qualified", "mixed", "reit", "none"]
+# treasury: US Treasury interest, federal income tax only (exempt from state tax)
 # tax_exempt: municipal-bond interest, free of federal income tax (state tax still applies)
 
 RISK_NOTE_PREFIX = "SPECIAL-RISK ETF:"
@@ -42,15 +43,15 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
     ETFInfo("VB", "Vanguard Small-Cap ETF", "US Small-Cap Equity", D(2004, 1, 26), 0.0005, "qualified", 0.90),
     # Bonds
     ETFInfo("BND", "Vanguard Total Bond Market ETF", "US Investment-Grade Bonds", D(2007, 4, 3), 0.0003, "interest", 0.0),
-    ETFInfo("TLT", "iShares 20+ Year Treasury Bond ETF", "Long-Term US Treasuries", D(2002, 7, 22), 0.0015, "interest", 0.0),
+    ETFInfo("TLT", "iShares 20+ Year Treasury Bond ETF", "Long-Term US Treasuries", D(2002, 7, 22), 0.0015, "treasury", 0.0),
     ETFInfo("HYG", "iShares iBoxx $ High Yield Corporate Bond ETF", "US High-Yield Bonds", D(2007, 4, 4), 0.0049, "interest", 0.0),
     ETFInfo("VTEB", "Vanguard Tax-Exempt Bond ETF", "US Municipal Bonds", D(2015, 8, 21), 0.0003, "tax_exempt", 0.0),
-    ETFInfo("SCHR", "Schwab Intermediate-Term U.S. Treasury ETF", "Intermediate-Term US Treasuries", D(2010, 8, 5), 0.0003, "interest", 0.0),
-    ETFInfo("SCHP", "Schwab U.S. TIPS ETF", "US Inflation-Protected Treasuries", D(2010, 8, 5), 0.0003, "interest", 0.0),
+    ETFInfo("SCHR", "Schwab Intermediate-Term U.S. Treasury ETF", "Intermediate-Term US Treasuries", D(2010, 8, 5), 0.0003, "treasury", 0.0),
+    ETFInfo("SCHP", "Schwab U.S. TIPS ETF", "US Inflation-Protected Treasuries", D(2010, 8, 5), 0.0003, "treasury", 0.0),
     ETFInfo("BNDX", "Vanguard Total International Bond ETF (USD Hedged)", "International Bonds", D(2013, 5, 31), 0.0007, "interest", 0.0),
     # Risk-free short-term Treasuries
-    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "interest", 0.0),
-    ETFInfo("SGOV", "iShares 0-3 Month Treasury Bond ETF", "T-Bills (Cash)", D(2020, 5, 26), 0.0009, "interest", 0.0),
+    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "treasury", 0.0),
+    ETFInfo("SGOV", "iShares 0-3 Month Treasury Bond ETF", "T-Bills (Cash)", D(2020, 5, 26), 0.0009, "treasury", 0.0),
     # Commodities
     ETFInfo("GLD", "SPDR Gold Shares", "Gold", D(2004, 11, 18), 0.0040, "none", 0.0, collectible=True),
     ETFInfo("SLV", "iShares Silver Trust", "Silver", D(2006, 4, 21), 0.0050, "none", 0.0, collectible=True),

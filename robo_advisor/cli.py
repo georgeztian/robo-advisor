@@ -240,9 +240,13 @@ def _ask_optimizer(s: Settings, has_target: bool) -> dict:
     if has_target:
         print("With a target, the optimizer picks the LOWEST-RISK portfolio that reaches the target with\n"
               "the probability you require, within your risk limit.")
-        p = _ask("Required probability of reaching the target, in %",
-                 round(s.optimization.goal.target_probability * 100), float)
-        prefs["target_probability"] = min(max(p, 1.0), 99.0) / 100
+        while True:
+            p = _ask("Required probability of reaching the target, in % (e.g. 80)",
+                     round(s.optimization.goal.target_probability * 100), float)
+            if 1 <= p <= 99:
+                break
+            print("  enter a percentage between 1 and 99, e.g. 80 for 80%")
+        prefs["target_probability"] = p / 100
         prefs["goal_risk_metric"] = _menu("How should risk be measured?", GOAL_RISK_METRICS,
                                           s.optimization.goal.risk_metric)
         return prefs
@@ -251,7 +255,12 @@ def _ask_optimizer(s: Settings, has_target: bool) -> dict:
     prefs["optimization_method"] = _menu("Optimization method:", METHOD_DESCRIPTIONS,
                                          s.optimization.default_method)
     if prefs["optimization_method"] == "target_return":
-        prefs["target_return"] = _ask("Target annual return (e.g. 0.06 for 6%)", cast=float)
+        while True:
+            r = _ask("Target annual return (e.g. 0.06 for 6%)", cast=float)
+            if -0.5 < r < 0.5:
+                break
+            print("  enter the return as a decimal, e.g. 0.06 for 6%")
+        prefs["target_return"] = r
     return prefs
 
 
@@ -430,7 +439,7 @@ def cmd_data(args) -> int:
 
 
 def cmd_graph(args) -> int:
-    s = load_settings()
+    s = load_settings(getattr(args, "config", None))
     g = (build_monitoring_graph if args.monitoring else build_advisory_graph)(s, make_provider("synthetic"))
     print(g.to_mermaid())
     print("\n%% execution waves: " + " | ".join(", ".join(w) for w in g.waves()))
@@ -485,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--as-of", help="analysis date YYYY-MM-DD or 'today' (overrides the profile)")
     gp = sub.add_parser("graph", help="print the workflow graph (mermaid)")
     gp.add_argument("--monitoring", action="store_true")
+    gp.add_argument("--config")
     q = sub.add_parser("questionnaire", help="print the configured questionnaire")
     q.add_argument("--config")
     e = sub.add_parser("etfs", help="print the ETF menu by category")

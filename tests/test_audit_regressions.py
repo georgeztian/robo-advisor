@@ -215,3 +215,33 @@ def test_interactive_validates_each_answer(monkeypatch):
     answers = iter(["30", "0.3", "24", "0.24"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert _fraction("max position", 0.5) == 0.3 and _rate("tax", 0.2) == 0.24
+
+
+def test_monitor_reports_holdings_that_are_no_longer_offered(settings, provider, target_run):
+    import json
+    from conftest import load_client
+    from robo_advisor.agents.monitor import build_monitoring_graph
+    from robo_advisor.report.html import audit_bundle
+    prior = json.loads(json.dumps(audit_bundle(target_run)))
+    w = prior["portfolio"]["weights"]
+    w = {t: x * 0.9 for t, x in w.items()} | {"TQQQ": 0.1}          # an ETF since removed from the menu
+    prior["portfolio"]["weights"] = w
+    rep = build_monitoring_graph(settings, provider).run(
+        {"client": load_client("client_target.json"), "prior": prior}).state["monitoring"]
+    msgs = [t.message for t in rep.triggers if t.code == "UNIVERSE_CHANGED"]
+    assert any("no longer offered" in m and "TQQQ" in m and "10%" in m for m in msgs)
+    assert not any("no longer selected" in m for m in msgs)
+
+
+def test_settings_reject_unknown_keys():
+    from robo_advisor.config import load_settings
+    with pytest.raises(ValueError, match="optimization.max_postion"):
+        load_settings(overrides={"optimization": {"max_postion": 0.3}})
+
+
+def test_interactive_probability_and_target_return_are_validated(settings, monkeypatch):
+    from robo_advisor.cli import _ask_optimizer
+    answers = iter(["0.8", "90", "", "5", "7", "0.07"])   # 0.8 % and 7 (= 700 %) are re-asked
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert _ask_optimizer(settings, True)["target_probability"] == 0.9
+    assert _ask_optimizer(settings, False) == {"optimization_method": "target_return", "target_return": 0.07}

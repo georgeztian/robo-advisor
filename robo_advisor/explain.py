@@ -24,8 +24,6 @@ REPORT_DISCLAIMER = (
     "Investing involves risk, including the possible loss of principal. You are solely responsible for "
     "conducting your own research and should consult a licensed financial professional before making "
     "any investment choices.")
-DISCLOSURE_NOT_ADVICE = ("This is an automated, model-based illustration and not personalized "
-                         "investment, legal or tax advice.")
 
 GOAL_METHOD_LABELS = {
     "goal_min_volatility": "Target-based: minimize volatility subject to P(terminal wealth >= target) >= p",
@@ -53,8 +51,9 @@ def _position_limits_text(rc) -> str:
     return ", ".join(f"{t} {fmt(p)}" for t, p in pairs.items() if p != common) + f", others {fmt(common)}"
 
 
-def _money(x: float) -> str:
-    return f"${x:,.0f}"
+def money(x: float | None) -> str:
+    """Whole dollars, e.g. $12,345; a dash when there is no value."""
+    return "—" if x is None or x != x else f"${x:,.0f}"
 
 
 def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port: np.ndarray,
@@ -115,10 +114,8 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             "ETF": t, "Name": CATALOG[t].name, "Category": category_of(t, categories),
             "Asset class": CATALOG[t].asset_class,
             "Weight": w[i], "Initial": port.initial_allocation[t], "Monthly": port.monthly_allocation[t],
-            "Est. return": mu[i], "Volatility": est.sigma[i], "Corr. to portfolio": corr_to_port[i],
+            "Est. return": mu[i], "Volatility": est.sigma[i],
             "Risk contribution": rc[i], "History (yrs)": est.history_years[t],
-            "Expense ratio": CATALOG[t].expense_ratio,
-            "Min position": port.constraints.position_min[t], "Max position": port.constraints.position_max[t],
             "Rationale": _reason(i, w, est, rc, corr_to_port, port.constraints.position_min[t],
                                  port.constraints.position_max[t], mu, capped),
         })
@@ -135,8 +132,8 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     if req.has_target:
         pt = sim.prob_target or 0.0
         gs = port.goal_search or {}
-        intro = (f"Given your initial investment of {_money(req.W0)}, monthly contribution of {_money(req.C)}, "
-                 f"and target of {_money(req.target)} by {req.target_date:%B %Y} ({req.months} months), ")
+        intro = (f"Given your initial investment of {money(req.W0)}, monthly contribution of {money(req.C)}, "
+                 f"and target of {money(req.target)} by {req.target_date:%B %Y} ({req.months} months), ")
         if not gs.get("infeasible"):
             goal_text = intro + (
                 f"the optimizer selected the portfolio that minimizes estimated "
@@ -151,7 +148,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
                 f"probability: {pt:.1%} in {sim.n_paths:,} simulated paths.")
             if gs.get("required_monthly_contribution"):
                 goal_text += (f" Raising the monthly contribution to about "
-                              f"{_money(gs['required_monthly_contribution'])} would reach "
+                              f"{money(gs['required_monthly_contribution'])} would reach "
                               f"{req.target_probability:.0%} with this portfolio.")
     else:
         if port.method == "mean_variance":       # the spec's §16 wording for the default method
@@ -164,14 +161,14 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
                    f"implied by your mapped risk profile")
         goal_text = (
             f"Because you did not specify a target amount, {how}. Over your {req.months / 12:.0f}-year "
-            f"horizon the median simulated portfolio value is {_money(sim.percentiles[50])}.")
+            f"horizon the median simulated portfolio value is {money(sim.percentiles[50])}.")
     portfolio_text = (
         f"Estimated annual return {port.expected_return:.2%}"
         + (f" after tax ({port.expected_return_pretax:.2%} pre-tax)" if tax.mu_after_tax is not None else "")
         + f", volatility {port.volatility:.2%}, Sharpe ratio {port.sharpe:.2f}.")
     headline = (f"{risk.profile} portfolio · est. return {port.expected_return:.1%} · volatility "
                 f"{port.volatility:.1%}" + (f" · {sim.prob_target:.0%} chance of reaching "
-                                              f"{_money(req.target)}" if req.has_target else ""))
+                                              f"{money(req.target)}" if req.has_target else ""))
 
     methodology = [
         f"Optimization: {method_label(port.method)}.",
@@ -191,7 +188,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     assumptions = [
         f"Risk-free rate ({est.risk_free_source}): {est.risk_free:.2%} per year.",
         f"Inflation assumption: {inflation:.1%} per year (real value of the deterministic projection: "
-        f"{_money(proj.fv_real)}).",
+        f"{money(proj.fv_real)}).",
         f"Constraints: {'short sales allowed, gross exposure <= ' + format(port.constraints.max_gross_leverage, '.0%') if port.constraints.allow_short else 'long-only'}"
         f", position limits {_position_limits_text(port.constraints)}, max volatility {port.constraints.max_volatility:.0%}"
         + (", category limits " + ", ".join(f"{c.category} {c.limit:.0%}" for c in port.constraints.category_caps)
@@ -215,7 +212,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         limitations.append("Less than 20 years of history (maximum available used): " + ", ".join(
             f"{t} ({dq.tickers[t].years_available:.1f}y)" for t in short) + ".")
     limitations += [f"Benchmark note: {n}" for n in bench.notes]
-    disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS, DISCLOSURE_NOT_ADVICE]
+    disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS]   # not-advice: REPORT_DISCLAIMER
     for t, x in zip(est.tickers, w):
         note = CATALOG[t].risk_note
         if note and abs(x) > 1e-6:

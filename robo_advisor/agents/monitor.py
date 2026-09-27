@@ -11,7 +11,7 @@ from ..monitoring import assess
 from ..review import Reviewer
 from ..universe import CATALOG
 from .advisory import (ConstraintAgent, DataValidationAgent, EstimationAgent, IntakeAgent, MarketDataAgent,
-                       RiskProfilerAgent, Services, TaxAgent, _gate)
+                       RiskProfilerAgent, Services, TaxAgent, add_input_gates)
 
 
 class MonitorIntakeAgent(IntakeAgent):
@@ -49,12 +49,7 @@ def build_monitoring_graph(settings: Settings, provider: DataProvider) -> Graph:
     for cls in (MonitorIntakeAgent, RiskProfilerAgent, MarketDataAgent, DataValidationAgent, EstimationAgent,
                 TaxAgent, ConstraintAgent, MonitorAgent):
         a = cls(sv)
-        g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides), description=(cls.__doc__ or "").strip()))
-    rv = Reviewer(settings)
-    g.add(_gate("review_data_gate", rv.review_data, ("request", "market", "data_quality"), "review_data",
-                "Reviewer: data validation, look-ahead, universe (before estimation)"))
-    g.add(_gate("review_inputs_gate", rv.review_inputs,
-                ("request", "risk", "market", "data_quality", "estimates", "tax", "constraints"),
-                "review_inputs", "Reviewer: data, estimates, risk mapping, constraints"))
+        g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides)))
+    add_input_gates(g, Reviewer(settings))
     g.build()
     return g

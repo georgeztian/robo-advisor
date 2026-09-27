@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 from markupsafe import escape
 
+from ..explain import money
 from ..models import Estimates, Portfolio, Request, RiskAssessment, SimulationResult, TaxContext
 
 TOL = 1e-4
@@ -25,10 +26,6 @@ PROB = "P(<i>F</i><sub><i>T</i></sub>(<i>w</i>) ≥ <i>F</i><sup>*</sup>)"
 
 def _pct(x: float, d: int = 1) -> str:
     return f"{x:.{d}%}"
-
-
-def _money(x: float) -> str:
-    return f"${x:,.0f}"
 
 
 def _objective(port: Portfolio, req: Request, alpha: float) -> tuple[str, str, str]:
@@ -175,14 +172,15 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
             cons.append({"id": "target", "name": "Reach your target",
                          "math": f"{PROB} ≥ <i>p</i> = {p:.2f}",
                          "plain": (f"In at least {p:.0%} of simulated futures your portfolio must be worth "
-                                   f"{_money(req.target)} or more on {req.target_date:%B %Y}."),
+                                   f"{money(req.target)} or more on {req.target_date:%B %Y}."),
                          "status": reached})
 
     symbols = [
         (WI, f"the share of your portfolio in ETF <i>i</i>; these {n} numbers are what the optimizer chooses"),
         ("<i>n</i>", f"the number of ETFs you selected ({n})"),
         ("<i>μ</i><sub><i>i</i></sub>", "estimated yearly return of ETF <i>i</i> from its price history"
-         + (" (after tax; a short position pays the pre-tax return)" if after_tax else "")),
+         + ((" (after tax; a short position pays the pre-tax return)" if rc.allow_short else " (after tax)")
+            if after_tax else "")),
         ("Σ", "the covariance matrix: how much each ETF moves and how the ETFs move together"),
         (VOL, "the portfolio's volatility: the typical size of its yearly ups and downs"),
         ("<i>l</i><sub><i>i</i></sub>, <i>u</i><sub><i>i</i></sub>", "the minimum and maximum share for ETF <i>i</i>"),
@@ -203,9 +201,9 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
         symbols += [
             ("<i>F</i><sub><i>T</i></sub>(<i>w</i>)",
              f"the portfolio's value at your target date in one simulated future: it starts with "
-             f"{_money(req.W0)}, adds {_money(req.C)} every month for {req.months} months"
+             f"{money(req.W0)}, adds {money(req.C)} every month for {req.months} months"
              + (", and pays taxes along the way" if tax.rates.enabled else "")),
-            ("<i>F</i><sup>*</sup>", f"your target amount ({_money(req.target)})"),
+            ("<i>F</i><sup>*</sup>", f"your target amount ({money(req.target)})"),
             ("<i>p</i>", f"the chance of reaching the target you require ({req.target_probability:.0%})"),
         ]
 
@@ -231,8 +229,8 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
              "its level of return (the \"efficient frontier\")."),
             ("Simulate each candidate",
              f"Each candidate was run through {gs.get('search_paths', 0):,} simulated futures with your "
-             f"{_money(req.W0)} start and {_money(req.C)} monthly contributions, counting how often it "
-             f"reaches {_money(req.target)} by {req.target_date:%B %Y}."),
+             f"{money(req.W0)} start and {money(req.C)} monthly contributions, counting how often it "
+             f"reaches {money(req.target)} by {req.target_date:%B %Y}."),
             ("Pick and double-check",
              (f"It picked the lowest-risk candidate reaching the target in at least {req.target_probability:.0%} "
               f"of futures (with a small safety margin), fine-tuned it between neighbouring candidates, then "
@@ -264,7 +262,7 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
                f"ETFs. It picks the mix that {obj_phrase}, but only among mixes that follow all of the rules below.")
     if goal and not infeasible:
         summary = (f"Think of the optimizer as trying every possible way to divide your money among your {n} "
-                   f"ETFs. Among the mixes that reach {_money(req.target)} by {req.target_date:%B %Y} in at least "
+                   f"ETFs. Among the mixes that reach {money(req.target)} by {req.target_date:%B %Y} in at least "
                    f"{req.target_probability:.0%} of simulated futures, it picks the one that {obj_phrase}. "
                    "Every mix must also follow the rules below.")
 

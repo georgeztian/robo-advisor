@@ -6,18 +6,24 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "default.yaml"
 
 
-class RiskBand(BaseModel):
+class _Cfg(BaseModel):
+    """Settings section: an unknown key (e.g. a typo in a --config file) is an error, not ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RiskBand(_Cfg):
     max_score: float
     profile: str
     max_volatility: float = Field(gt=0)
 
 
-class Question(BaseModel):
+class Question(_Cfg):
     id: str
     text: str
     weight: float = Field(ge=0)
@@ -38,7 +44,7 @@ class Question(BaseModel):
         return self.labels.get(option, option.replace("_", " "))
 
 
-class Questionnaire(BaseModel):
+class Questionnaire(_Cfg):
     capacity: list[Question]
     tolerance: list[Question]
 
@@ -51,7 +57,7 @@ class Questionnaire(BaseModel):
         return self
 
 
-class UniverseCfg(BaseModel):
+class UniverseCfg(_Cfg):
     """ETFs offered to clients, grouped into categories (the client chooses from these)."""
 
     categories: dict[str, list[str]]
@@ -77,7 +83,7 @@ class UniverseCfg(BaseModel):
         return [t for ts in self.categories.values() for t in ts]
 
 
-class DataCfg(BaseModel):
+class DataCfg(_Cfg):
     provider: Literal["synthetic", "csv", "yahoo"] = "yahoo"
     csv_dir: str = "data/prices"
     cache_dir: str = ".cache/prices"
@@ -99,14 +105,14 @@ class DataCfg(BaseModel):
     fred_series: str = "DTB3"
 
 
-class EstimationCfg(BaseModel):
+class EstimationCfg(_Cfg):
     trading_days: int = 252
     mu_shrinkage: float = Field(0.0, ge=0, le=1)
     var_confidence: float = 0.95
     min_overlap_days: int = 252
 
 
-class GoalCfg(BaseModel):
+class GoalCfg(_Cfg):
     target_probability: float = Field(0.80, gt=0, lt=1)
     risk_metric: Literal["volatility", "cvar"] = "volatility"
     frontier_points: int = 25
@@ -118,7 +124,7 @@ Method = Literal["mean_variance", "min_volatility", "max_sharpe", "cvar", "targe
                  "risk_parity", "max_diversification"]
 
 
-class OptimizationCfg(BaseModel):
+class OptimizationCfg(_Cfg):
     default_method: Method = "mean_variance"
     min_position: float = Field(0.0, ge=0, lt=1)
     max_position: float = Field(0.5, gt=0, le=1)
@@ -131,7 +137,7 @@ class OptimizationCfg(BaseModel):
     goal: GoalCfg = GoalCfg()
 
 
-class SimulationCfg(BaseModel):
+class SimulationCfg(_Cfg):
     n_paths: int = 10000
     seed: int = 20260924
     distribution: Literal["lognormal", "bootstrap"] = "lognormal"
@@ -139,29 +145,29 @@ class SimulationCfg(BaseModel):
     inflation: float = 0.025
 
 
-class RebalancingCfg(BaseModel):
+class RebalancingCfg(_Cfg):
     type: Literal["calendar", "threshold"] = "calendar"
     frequency: Literal["monthly", "quarterly", "annual"] = "quarterly"
     threshold: float = 0.05
 
 
-class ScenarioShift(BaseModel):
+class ScenarioShift(_Cfg):
     mu_shift: float
     vol_multiplier: float = Field(gt=0)
 
 
-class ScenariosCfg(BaseModel):
+class ScenariosCfg(_Cfg):
     conservative: ScenarioShift
     base: ScenarioShift
     optimistic: ScenarioShift
     n_paths: int = 5000
 
 
-class BenchmarkCfg(BaseModel):
+class BenchmarkCfg(_Cfg):
     years: int = 10
 
 
-class TaxCfg(BaseModel):
+class TaxCfg(_Cfg):
     ordinary_rate: float = 0.24
     qualified_dividend_rate: float = 0.15
     ltcg_rate: float = 0.15
@@ -173,7 +179,7 @@ class TaxCfg(BaseModel):
     liquidate_at_horizon: bool = False
 
 
-class MonitoringCfg(BaseModel):
+class MonitoringCfg(_Cfg):
     target_probability_floor: float = 0.70
     risk_limit_tolerance: float = 0.005
     volatility_change_trigger: float = 0.25
@@ -181,7 +187,7 @@ class MonitoringCfg(BaseModel):
     contribution_change_trigger: float = 0.10
 
 
-class ReviewCfg(BaseModel):
+class ReviewCfg(_Cfg):
     mu_abs_tol: float = 5e-4
     sigma_rel_tol: float = 0.02
     mc_z: float = 4.0
@@ -191,7 +197,7 @@ class ReviewCfg(BaseModel):
     wealth_rel_tol: float = 1e-6
 
 
-class Settings(BaseModel):
+class Settings(_Cfg):
     risk_bands: list[RiskBand]
     questionnaire: Questionnaire
     universe: UniverseCfg
