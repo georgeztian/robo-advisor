@@ -106,7 +106,7 @@ with evidence. The rule families:
 | data | R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, blocking validation findings, independent adjusted-price consistency, expense ratios) |
 | inputs | R-RISK (scores, min-mapping, band), R-EST (coverage, μ, σ, PSD Σ), R-TAX, R-CON |
 | portfolio | R-PORT: Σw = 1, long-only, per-ETF minimum/maximum positions (R-PORT-03), gross exposure, category limits (R-PORT-15), σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
-| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held leveraged / option-income / crypto ETFs, optimization problem written out with every imposed constraint (R-EXP-08)) |
+| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held option-income / crypto ETFs, optimization problem written out with every imposed constraint (R-EXP-08)) |
 
 When remediation fixes a gate, only the **latest** report of each stage decides the verdict.
 Superseded attempts are kept as history in the report and in `audit.json`.
@@ -119,23 +119,25 @@ taxes, missing disclosures and a misreported probability.
 
 ## ETF universe and data
 
-* **Universe.** 25 ETFs in 9 categories, defined in `config/default.yaml` (`universe.categories`):
+* **Universe.** ETFs by category, defined in `config/default.yaml` (`universe.categories`):
 
   | Category | ETFs |
   |---|---|
-  | Equity | SPY, VOO, VTI, QQQ, TQQQ |
-  | Bond | BND, TLT, HYG |
-  | Risk-free Short-term Treasury | BIL, SGOV |
+  | Equity | SPY, VOO, VTI, QQQ, VTV, VB |
+  | Bond | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
+  | Risk-free Short-term Treasury | SGOV |
   | Commodity | GLD, SLV |
   | International Equity | VXUS, IEFA, VWO |
   | Real Estate | VNQ, SCHH |
   | Dividend | SCHD, VYM, DGRO |
-  | Income | SPYI, QQQI, JEPQ, JEPI |
+  | Income | SPYI, QQQI, JEPI |
   | Crypto | IBIT |
 
   `robo_advisor/universe.py` holds each ETF's facts: inception date, expense ratio, tax
-  character of its distributions, collectible status (GLD, SLV), and a special-risk note
-  (TQQQ, the four income ETFs, IBIT). The config is validated against the catalog. Clients
+  character of its distributions (interest, federally tax-exempt municipal interest for VTEB,
+  qualified or mixed dividends, REIT income), collectible status (GLD, SLV), and a special-risk
+  note (the option-income ETFs, IBIT). The config is validated against the catalog, which also
+  holds BIL: the risk-free series, fetched but not offered to clients. Clients
   choose ETFs by category: the interactive questionnaire goes category by category, and a
   profile file lists tickers and/or category names. There is no implicit "all ETFs" default.
   This list replaces the ETF list in spec §3.
@@ -145,8 +147,9 @@ taxes, missing disclosures and a misreported probability.
   - `synthetic`: deterministic simulated histories, calibrated per ETF, for offline testing
     (the test suite uses it); reports are watermarked SYNTHETIC.
   - The risk-free rate can come from FRED (`DTB3`) instead of BIL.
-* **Benchmark.** VOO (S&P 500 total return) is always fetched for the §14 comparison. BIL is
-  always fetched as the T-bill proxy, whether or not the client selected them.
+* **Benchmark.** VOO (S&P 500 total return) is always fetched for the §14 comparison, whether
+  or not the client selected it. BIL is always fetched as the T-bill risk-free proxy; it is not
+  on the client menu (SGOV, the menu's T-bill ETF, has too short a history for a 20-year rate).
 
 ## Key modelling decisions
 

@@ -138,7 +138,7 @@ class Optimizer:
             raise InfeasibleError(
                 f"the lowest-volatility portfolio of the selected ETFs has {self.vol(w):.2%} volatility, "
                 f"above the {self.rc.max_volatility:.2%} limit of the mapped risk profile; "
-                "add lower-risk ETFs (e.g. BIL, BND) to the universe")
+                "add lower-risk ETFs (e.g. SGOV, BND) to the universe")
 
     def blend_to_cap(self, w: np.ndarray) -> tuple[np.ndarray, float]:
         """Smallest t in [0,1] with vol((1-t)w + t w_minvol) <= sigma_max."""

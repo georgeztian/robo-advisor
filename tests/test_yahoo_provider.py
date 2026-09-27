@@ -28,8 +28,8 @@ def yahoo(monkeypatch, tmp_path):
 
 
 def test_normalize_recovers_raw_prices_splits_and_distributions():
-    syn = SyntheticProvider(inject_gaps=False)._make("TQQQ")          # has several 2:1 splits
-    got = normalize_yahoo(fake_yfinance.yahoo_frame("TQQQ"), "TQQQ")
+    syn = SyntheticProvider(inject_gaps=False)._make("QQQ")          # has several 2:1 splits
+    got = normalize_yahoo(fake_yfinance.yahoo_frame("QQQ"), "QQQ")
     syn = syn.loc[got.index]
     assert (got["split_ratio"] > 1).sum() == (syn["split_ratio"] > 1).sum() >= 2
     assert np.allclose(got["close"], syn["close"], rtol=1e-6)
@@ -52,16 +52,16 @@ def test_normalize_handles_yahoo_quirks():
 
 
 def test_yahoo_format_passes_validation_with_isolated_glitch_tolerated(yahoo):
-    frames = yahoo.fetch(["VOO", "BND", "VWO", "SCHD", "TQQQ"], WS, AS_OF)
+    frames = yahoo.fetch(["VOO", "BND", "VWO", "SCHD", "QQQ"], WS, AS_OF)
     dq = validate(frames, WS, AS_OF, __import__("robo_advisor.config", fromlist=["x"]).load_settings().data)
     assert not dq.blocking, dq.blocking
     assert any(w.startswith("BND:") and "tolerated" in w for w in dq.warnings)
 
 
 def test_missed_split_adjustment_still_blocks(yahoo, settings):
-    fake_yfinance.SPLIT_UNADJUSTED.add("TQQQ")
-    dq = validate(yahoo.fetch(["TQQQ"], WS, AS_OF), WS, AS_OF, settings.data)
-    assert any(b.startswith("TQQQ:") for b in dq.blocking)
+    fake_yfinance.SPLIT_UNADJUSTED.add("QQQ")
+    dq = validate(yahoo.fetch(["QQQ"], WS, AS_OF), WS, AS_OF, settings.data)
+    assert any(b.startswith("QQQ:") for b in dq.blocking)
 
 
 def test_retry_cache_and_refresh(yahoo):

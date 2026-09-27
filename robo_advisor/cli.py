@@ -106,7 +106,7 @@ def _etf_line(i: int, t: str) -> str:
 def choose_etfs(s: Settings) -> list[str]:
     """Step 4: the client picks ETFs category by category."""
     cats = s.universe.categories
-    print(f"\n== Step 4: Investment universe ({len(s.universe.tickers)} ETFs in {len(cats)} categories) ==")
+    print("\n== Step 4: Investment universe (ETFs by category) ==")
     print("For each category, type the numbers of the ETFs to include (e.g. 1,3), 'all' for the whole "
           "category, or press Enter to skip it.")
     while True:
@@ -440,13 +440,12 @@ def cmd_graph(args) -> int:
 def cmd_etfs(args) -> int:
     """Print the ETF menu (categories) for filling in a profile's "universe"."""
     s = load_settings(getattr(args, "config", None))
-    print(f"{len(s.universe.tickers)} ETFs in {len(s.universe.categories)} categories. In a profile, list tickers "
-          "and/or whole category names under \"universe\".")
+    print("The ETF menu by category. In a profile, list tickers and/or whole category names under \"universe\".")
     for cat, tickers in s.universe.categories.items():
         print(f"\n{cat}")
         for i, t in enumerate(tickers, 1):
             print(_etf_line(i, t))
-    print("\n[special risk] = leveraged, option-income or crypto ETF; its risks are disclosed in the report.")
+    print("\n[special risk] = option-income or crypto ETF; its risks are disclosed in the report.")
     return 0
 
 

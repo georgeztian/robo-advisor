@@ -182,7 +182,7 @@ def test_monitor_evaluates_holdings_dropped_from_the_selection(settings, provide
     from robo_advisor.report.html import audit_bundle
     prior = json.loads(json.dumps(audit_bundle(target_run)))
     held = [t for t, w in prior["portfolio"]["weights"].items() if w > 1e-6]
-    others = [t for t in settings.universe.tickers if t not in held][:4] + ["BIL"]
+    others = [t for t in settings.universe.tickers if t not in held][:4] + ["SGOV"]
     c = load_client("client_target.json", universe=[t for t in others if t not in held] or ["SGOV"])
     rep = build_monitoring_graph(settings, provider).run({"client": c, "prior": prior}).state["monitoring"]
     codes = {t.code for t in rep.triggers}

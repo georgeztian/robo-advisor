@@ -60,6 +60,8 @@ def resolve_rates(tickers: list[str], tax_in: TaxInput, cfg: TaxCfg) -> TaxRates
         info = CATALOG[t]
         if info.income_type == "interest":
             inc.append(ordinary)
+        elif info.income_type == "tax_exempt":      # municipal interest: federal-exempt, state-taxed
+            inc.append(state)
         elif info.income_type == "none":
             inc.append(0.0)
         else:

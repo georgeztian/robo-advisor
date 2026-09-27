@@ -75,6 +75,8 @@ class Reviewer:
         info = CATALOG[t]
         if info.income_type == "interest":
             return ordinary
+        if info.income_type == "tax_exempt":
+            return state
         if info.income_type == "none":
             return 0.0
         return info.qualified_fraction * qual + (1 - info.qualified_fraction) * ordinary
@@ -461,7 +463,7 @@ class Reviewer:
         if special:
             f(out, "R-EXP-07", "§16", "BLOCKER",
               all(any(d.startswith(f"{RISK_NOTE_PREFIX} {t} ") for d in exp.disclosures) for t in special),
-              f"special risks disclosed for held {', '.join(special)} (leveraged / option-income / crypto)")
+              f"special risks disclosed for held {', '.join(special)} (option-income / crypto)")
         # the optimization problem must be written out with every constraint the run imposed
         opt = exp.optimization or {}
         need = {"budget", "positions", "risk", "gross" if req.client.constraints.allow_short else "no_short"}

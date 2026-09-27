@@ -34,21 +34,22 @@ a report is produced.
 | Review | An independent reviewer runs about 60 checks at 4 checkpoints and stops the run on any blocking error |
 | Output | HTML report, JSON audit trail, and the client's saved answers; later check-ins raise review triggers |
 
-### The ETF menu: 25 ETFs in 9 categories
+### The ETF menu
 
 | Category | ETFs |
 |---|---|
-| Equity ETFs | SPY, VOO, VTI, QQQ, TQQQ |
-| Bond ETFs | BND, TLT, HYG |
-| Risk-free Short-term Treasury ETFs | BIL, SGOV |
+| Equity ETFs | SPY, VOO, VTI, QQQ, VTV, VB |
+| Bond ETFs | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
+| Risk-free Short-term Treasury ETFs | SGOV |
 | Commodity ETFs | GLD, SLV |
 | International Equity ETFs | VXUS, IEFA, VWO |
 | Real Estate ETFs | VNQ, SCHH |
 | Dividend ETFs | SCHD, VYM, DGRO |
-| Income ETFs | SPYI, QQQI, JEPQ, JEPI |
+| Income ETFs | SPYI, QQQI, JEPI |
 | Crypto ETFs | IBIT |
 
 Clients choose from this menu category by category; nothing is included unless chosen.
+`./ra etfs` always prints the current menu.
 Historical data is analyzed using up to 20 years of daily prices. ETFs younger than 20 years use all the history they have and are flagged.
 
 **Category limits** cap how much of the portfolio one category may take:
@@ -132,9 +133,10 @@ This first command then prints the ETF menu. Seeing the menu means the installat
 ```
 ./ra data
 ```
-This downloads about 20 years of real daily prices from Yahoo Finance for all 25 ETFs. Two of
-them are also always used behind the scenes: VOO as the S&P 500 benchmark, and BIL as the T-bill
-risk-free proxy. It then validates the data and prints a table ending in `Data OK.`
+This downloads about 20 years of real daily prices from Yahoo Finance for every ETF on the menu,
+plus two series always used behind the scenes: VOO as the S&P 500 benchmark, and BIL (SPDR 1-3
+Month T-Bill ETF) for the risk-free rate. BIL is not on the menu, so clients can't select it;
+it is only used to measure the T-bill rate over the full 20 years. It then validates the data and prints a table ending in `Data OK.`
 
 The prices are cached in `.cache/prices/`, so later runs are fast and work offline. Re-run
 this command whenever you want to check the data. Every analysis also refreshes the cache
@@ -154,7 +156,7 @@ The app asks, in order:
    the investment horizon in years.
 3. **9 risk-capacity questions** and **8 risk-tolerance questions**. Type the number of the
    answer. The investment-horizon question is answered automatically from the goal.
-4. **ETFs, category by category.** For each of the 9 categories, type the numbers of the ETFs
+4. **ETFs, category by category.** For each category, type the numbers of the ETFs
    to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
 5. Whether short sales are allowed, then the **position limits**: keep 0 %–50 % for every ETF
    (Enter), or type `n` to set a minimum and maximum for each chosen ETF. It then shows the
