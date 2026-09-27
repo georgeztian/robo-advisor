@@ -110,13 +110,13 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
     if rc.allow_short:
         pos_math = (f"|{WI}| ≤ <i>u</i><sub><i>i</i></sub> &nbsp;and&nbsp; {WI} ≥ <i>l</i><sub><i>i</i></sub> "
                     "for ETFs with a minimum <i>l</i><sub><i>i</i></sub> &gt; 0, &nbsp;for every <i>i</i>")
-        pos_plain = ("Each ETF stays within the minimum and maximum share you set (see the table below). "
+        pos_plain = ("Each ETF stays within the minimum and maximum share you set (each ETF's limits are listed under “Additional optimization details”). "
                      "A short position may not be larger than the ETF's maximum, and an ETF with a positive "
                      "minimum cannot be shorted.")
     else:
         pos_math = f"<i>l</i><sub><i>i</i></sub> ≤ {WI} ≤ <i>u</i><sub><i>i</i></sub> &nbsp;for every ETF <i>i</i>"
         pos_plain = ("Each ETF gets at least its minimum share and at most its maximum share of the "
-                     "portfolio (see the table below).")
+                     "portfolio (each ETF's limits are listed under “Additional optimization details”).")
     cons.append({"id": "positions", "name": "Position limits", "math": pos_math, "plain": pos_plain,
                  "status": status})
     # 3. long-only or gross exposure

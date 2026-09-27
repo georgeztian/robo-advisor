@@ -68,6 +68,8 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
 .objective { font-size: 17px; padding: 10px 14px; border-left: 3px solid var(--series-1); background: var(--surface-0); border-radius: 6px; margin: 8px 0; }
 td.math { min-width: 220px; }
 ol.steps li { margin: 6px 0; }
+table.taxes th.grp { text-align: center; border-bottom: 1px solid var(--border); }
+table.taxes td.num, table.taxes th.num { min-width: 64px; }
 @media (max-width: 720px) {
   table.cons, table.cons tbody, table.cons tr, table.cons td { display: block; width: 100%; }
   table.cons tr.head { display: none; }
@@ -158,6 +160,7 @@ ol.steps li { margin: 6px 0; }
   <ul>{% for r in o.rules_plain %}<li>{{ r|safe }}</li>{% endfor %}</ul>
   <h3>Step by step</h3>
   <ol class="steps">{% for title, text in o.steps %}<li><b>{{ title }}.</b> {{ text }}</li>{% endfor %}</ol>
+  <details><summary>Additional optimization details</summary>
   <h3>The optimization problem</h3>
   <p class="sub">The optimizer chooses the weights <span class="math"><i>w</i> = (<i>w</i><sub>1</sub>, …, <i>w</i><sub><i>n</i></sub>)</span>, the share of your money in each ETF, to</p>
   <div class="objective math">{{ o.objective.math|safe }}</div>
@@ -175,6 +178,7 @@ ol.steps li { margin: 6px 0; }
   <div class="scroll"><table><tr><th>ETF</th><th class="num">Minimum <span class="math"><i>l</i><sub><i>i</i></sub></span></th><th class="num">Recommended <span class="math"><i>w</i><sub><i>i</i></sub></span></th><th class="num">Maximum <span class="math"><i>u</i><sub><i>i</i></sub></span></th></tr>
   {% for r in o.positions %}<tr><td>{{ r.ticker }}</td><td class="num">{{ "%.0f%%"|format(r.min*100) }}</td><td class="num">{{ "%.1f%%"|format(r.weight*100) }}</td><td class="num">{{ "%.0f%%"|format(r.max*100) }}</td></tr>{% endfor %}
   </table></div>
+  </details>
   {% for n in o.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
 </section>
 
@@ -237,6 +241,22 @@ ol.steps li { margin: 6px 0; }
     <tr><th>ETF</th><th>Inception</th><th>First obs.</th><th class="num">Years</th><th>≥20y</th><th class="num">Missing</th><th class="num">Splits</th><th class="num">Distributions</th><th class="num">Adj. check err</th><th class="num">Expense</th><th>Issues</th></tr>
     {% for q in dq_rows %}<tr><td>{{ q.ticker }}</td><td>{{ q.inception }}</td><td>{{ q.first_obs }}</td><td class="num">{{ "%.1f"|format(q.years_available) }}</td><td>{{ 'yes' if q.meets_min_history else 'no (max available used)' }}</td><td class="num">{{ q.missing_days }}</td><td class="num">{{ q.n_splits }}</td><td class="num">{{ q.n_distributions }}</td><td class="num">{{ "%.1e"|format(q.adj_consistency_max_error) }}</td><td class="num">{{ "%.2f%%"|format((q.expense_ratio or 0)*100) }}</td><td>{{ q.issues|join('; ') }}</td></tr>{% endfor %}
   </table></div></details>
+  <details><summary>Tax rates applied to each selected ETF</summary>
+    {% if taxes %}<p class="sub">Estimated rates from your answers (and the defaults for any you left out). The state rate applies to every kind of income except US Treasury interest; municipal-bond interest is free of federal tax. "Combined" is federal plus state.</p>
+    {% else %}<p class="sub">Taxes are not included in this analysis (pre-tax), so every rate below is 0%.</p>{% endif %}
+    <h3>Rate schedule</h3>
+    <div class="scroll"><table><tr><th>Kind of income</th><th class="num">Federal</th><th class="num">State</th><th class="num">Combined</th></tr>
+    {% for key, label in tax_labels.items() %}{% set r = tax.schedule[key] %}<tr><td>{{ label }}</td><td class="num">{{ pct(r[0]) }}</td><td class="num">{{ pct(r[1]) }}</td><td class="num">{{ pct(r[0] + r[1]) }}</td></tr>{% endfor %}
+    </table></div>
+    <h3>By ETF</h3>
+    <div class="scroll"><table class="taxes">
+      <tr><th rowspan="2">ETF</th><th rowspan="2">Distributions are taxed as</th><th colspan="3" class="grp">Distributions</th><th colspan="3" class="grp">Long-term capital gains</th><th colspan="3" class="grp">Short-term capital gains</th></tr>
+      <tr>{% for _ in range(3) %}<th class="num">Federal</th><th class="num">State</th><th class="num">Combined</th>{% endfor %}</tr>
+      {% for e in tax.by_etf %}<tr><td>{{ e.ticker }}</td><td>{{ e.treatment }}{% if e.collectible %}; gains taxed at the collectibles rate{% endif %}</td>
+        {% for k in ("income", "lt", "st") %}<td class="num">{{ pct(e[k][0]) }}</td><td class="num">{{ pct(e[k][1]) }}</td><td class="num"><b>{{ pct(e[k][0] + e[k][1]) }}</b></td>{% endfor %}</tr>{% endfor %}
+    </table></div>
+    <p class="sub">Long-term gains are on holdings kept over a year, short-term on holdings sold within a year. Gains are realized when the portfolio is rebalanced{% if taxes %}, and at the end if liquidation at the horizon is included{% endif %}.</p>
+  </details>
 </section>
 
 <section>

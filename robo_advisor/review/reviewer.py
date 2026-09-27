@@ -392,6 +392,26 @@ class Reviewer:
             f(out, "R-TAX-02", "§5", "BLOCKER", bound < 100 or sim.taxes_paid_median >= 0.6 * bound,
               f"median taxes paid {sim.taxes_paid_median:,.0f} >= 60% of the independent distribution-tax "
               f"estimate {bound:,.0f} (capital-gains tax comes on top)")
+        # the per-ETF tax-rate table shown in the report (spec §5): combined rates re-derived here
+        tc, ti = self.s.tax, req.client.taxes
+        g = lambda v, d: d if v is None else v          # noqa: E731
+        state = g(ti.state_rate, tc.state_rate)
+        fed_ord = g(ti.ordinary_rate, tc.ordinary_rate)
+        bad = []
+        for row in tax.by_etf:
+            t = row["ticker"]
+            if ti.enabled:
+                exp_lt = (min(tc.collectibles_rate, fed_ord) if CATALOG[t].collectible else g(ti.ltcg_rate, tc.ltcg_rate)) + state
+                want = (self._income_rate(t), exp_lt, g(ti.stcg_rate, tc.stcg_rate) + state)
+            else:
+                want = (0.0, 0.0, 0.0)
+            shown = tuple(sum(row[k]) for k in ("income", "lt", "st"))
+            if any(abs(a - b) > 1e-12 for a, b in zip(shown, want)):
+                bad.append(f"{t} shows {shown}, expected {want}")
+        f(out, "R-TAX-03", "§5", "BLOCKER",
+          [row["ticker"] for row in tax.by_etf] == req.tickers and not bad,
+          "tax-rate table matches the independently derived rates for every selected ETF"
+          + ("" if ti.enabled else " (taxes off: all 0%)") if not bad else f"tax-rate table wrong: {bad}")
         # deterministic projection (spec §11)
         r = port.expected_return / 12
         fv = ind.fv_by_recursion(req.W0, req.C, r, req.months)

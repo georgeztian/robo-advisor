@@ -262,15 +262,18 @@ From top to bottom:
 - **Risk profile:** the capacity, tolerance and mapped scores, and the questionnaire scoring.
 - **Recommended portfolio:** each ETF's category, weight, initial and monthly dollars, and why
   it was chosen; the allocation by category; ETFs considered but not held.
-- **How the optimizer chose this allocation:** a simple explanation, the steps the optimizer
-  took, the problem in mathematical form with every constraint (and where the recommended
-  portfolio sits against each one) and what each symbol means (including the covariance matrix
-  **V**, built from the ETFs' volatilities and correlations), and each ETF's minimum and maximum.
+- **How the optimizer chose this allocation:** a simple explanation and the steps the optimizer
+  took. Under **Additional optimization details** (click to expand): the problem in mathematical
+  form with every constraint (and where the recommended portfolio sits against each one), what
+  each symbol means (including the covariance matrix **V**, built from the ETFs' volatilities and
+  correlations), and each ETF's minimum and maximum.
 - **Financial projection:** the Monte Carlo range, the terminal-value distribution against the
   target, and the scenarios.
 - **S&P 500 comparison:** the last 10 years with the same money invested.
 - **How it was made:** methodology, assumptions, limitations, and disclosures (including the
-  special-risk ETF notes).
+  special-risk ETF notes). Expandable tables at the end show the parameter estimates, the data
+  validation, and the **tax rates applied to each selected ETF**: federal, state and combined
+  rates on its distributions, long-term and short-term gains (all 0 % for a pre-tax analysis).
 - **Independent review:** every rule the reviewer checked, and the agent workflow trace.
 - **Disclaimer:** the outputs are informational only, not financial, investment, legal or
   trading advice.

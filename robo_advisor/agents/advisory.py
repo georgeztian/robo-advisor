@@ -28,7 +28,7 @@ from ..projection import project
 from ..questionnaire import assess_risk
 from ..review import Reviewer
 from ..simulation import MCModel, run_scenarios, simulate, summarize
-from ..tax import DISCLAIMER, after_tax_returns, resolve_rates
+from ..tax import DISCLAIMER, after_tax_returns, etf_tax_rates, resolve_rates, tax_schedule
 from ..universe import resolve_universe
 
 
@@ -170,11 +170,14 @@ class TaxAgent:
 
     def __call__(self, st):
         req, est = st["request"], st["estimates"]
-        rates = resolve_rates(req.tickers, req.client.taxes, self.sv.settings.tax)
+        cfg = self.sv.settings.tax
+        rates = resolve_rates(req.tickers, req.client.taxes, cfg)
+        sched = tax_schedule(req.client.taxes, cfg)            # all zero when taxes are off
+        table = dict(schedule=sched, by_etf=[etf_tax_rates(t, sched) for t in req.tickers])
         if not rates.enabled:
-            return {"tax": TaxContext(rates, None, None, None)}
+            return {"tax": TaxContext(rates, None, None, None, **table)}
         monthly, mu_after = after_tax_returns(est, rates)
-        return {"tax": TaxContext(rates, mu_after, monthly, DISCLAIMER)}
+        return {"tax": TaxContext(rates, mu_after, monthly, DISCLAIMER, **table)}
 
 
 class ConstraintAgent:

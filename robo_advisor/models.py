@@ -371,6 +371,8 @@ class TaxContext:
     mu_after_tax: np.ndarray | None
     monthly_after_tax: pd.DataFrame | None
     disclaimer: str | None
+    schedule: dict[str, tuple[float, float]] = field(default_factory=dict)   # kind -> (federal, state)
+    by_etf: list[dict] = field(default_factory=list)                        # tax.etf_tax_rates per ETF
 
 
 @dataclass

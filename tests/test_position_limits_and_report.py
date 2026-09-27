@@ -139,3 +139,44 @@ def test_every_question_has_five_options_and_the_attitude_question_exists(settin
     assert att.label("avoid_losses").startswith("I strongly prefer avoiding losses")
     assert list(att.options.values()) == sorted(att.options.values())
     assert "held_but_nervous" in next(x for x in q.tolerance if x.id == "crash_behavior").options
+
+
+# ---------------------------------------------------------------- tax-rate table
+
+def test_tax_rate_table_per_etf(settings, provider):
+    res = run_with(settings, provider, "client_no_target.json", {})
+    tax = res.state["tax"]
+    assert [r["ticker"] for r in tax.by_etf] == res.state["request"].tickers
+    by = {r["ticker"]: r for r in tax.by_etf}
+    # the table's combined rates are exactly the rates the tax engine uses
+    for i, t in enumerate(res.state["request"].tickers):
+        assert sum(by[t]["income"]) == pytest.approx(tax.rates.income[i])
+        assert sum(by[t]["lt"]) == pytest.approx(tax.rates.lt[i])
+        assert sum(by[t]["st"]) == pytest.approx(tax.rates.st)
+    html = render(res)
+    assert "Tax rates applied to each selected ETF" in html and "Rate schedule" in html
+    assert "R-TAX-03" in {f.rule_id for r in res.latest_reviews() for f in r.findings if f.passed}
+
+
+def test_tax_rate_table_is_all_zero_when_taxes_are_off(limited_run):
+    tax = limited_run.state["tax"]
+    assert not limited_run.state["request"].client.taxes.enabled
+    assert all(v == (0.0, 0.0) for v in tax.schedule.values())
+    assert all(r[k] == (0.0, 0.0) for r in tax.by_etf for k in ("income", "lt", "st"))
+    assert "every rate below is 0%" in render(limited_run)
+
+
+def test_reviewer_blocks_a_wrong_tax_rate_table(settings, limited_run):
+    st = dict(limited_run.state)
+    tax = st["tax"]
+    rows = [dict(r) for r in tax.by_etf]
+    rows[0]["income"] = (0.10, 0.0)
+    st["tax"] = dataclasses.replace(tax, by_etf=rows)
+    assert "R-TAX-03" in {f.rule_id for f in Reviewer(settings).review_final(st).blocking}
+
+
+def test_optimization_details_are_folded(limited_run):
+    html = render(limited_run)
+    i = html.index("<summary>Additional optimization details</summary>")
+    for text in ("The optimization problem", "What the symbols mean", "Position limits for each ETF"):
+        assert html.index(text) > i
