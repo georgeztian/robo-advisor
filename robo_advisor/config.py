@@ -22,6 +22,7 @@ class Question(BaseModel):
     text: str
     weight: float = Field(ge=0)
     options: dict[str, float]
+    labels: dict[str, str] = {}         # optional display text per option code (default: the code)
     derive_from_goal: bool = False
 
     @model_validator(mode="after")
@@ -29,7 +30,12 @@ class Question(BaseModel):
         for k, v in self.options.items():
             if not 0 <= v <= 100:
                 raise ValueError(f"question {self.id}: option {k} score {v} outside 0-100")
+        if set(self.labels) - set(self.options):
+            raise ValueError(f"question {self.id}: labels for unknown options {sorted(set(self.labels) - set(self.options))}")
         return self
+
+    def label(self, option: str) -> str:
+        return self.labels.get(option, option.replace("_", " "))
 
 
 class Questionnaire(BaseModel):
@@ -114,6 +120,7 @@ Method = Literal["mean_variance", "min_volatility", "max_sharpe", "cvar", "targe
 
 class OptimizationCfg(BaseModel):
     default_method: Method = "mean_variance"
+    min_position: float = Field(0.0, ge=0, lt=1)
     max_position: float = Field(0.5, gt=0, le=1)
     max_gross_leverage: float = Field(1.5, ge=1)
     category_limits: dict[str, float] = {        # max share of the portfolio per ETF category

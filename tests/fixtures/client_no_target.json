@@ -27,7 +27,8 @@
     "equity_comfort": "comfortable",
     "experience": "stocks_etfs",
     "crash_behavior": "held",
-    "preserve_vs_growth": "mostly_growth"
+    "preserve_vs_growth": "mostly_growth",
+    "risk_attitude": "substantial"
   },
   "universe": [
     "Equity ETFs",

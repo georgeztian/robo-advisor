@@ -75,7 +75,7 @@ def test_short_positions_get_no_tax_refund():
 def test_short_leg_uses_pretax_return():
     mu_after, mu_pre = np.array([0.08, 0.02]), np.array([0.09, 0.05])
     cov = np.diag([0.04, 0.01])
-    rc = ResolvedConstraints(["A", "B"], True, 1.5, 2.0, 0.5)
+    rc = ResolvedConstraints(["A", "B"], True, {"A": 0.0, "B": 0.0}, {"A": 1.5, "B": 1.5}, 2.0, 0.5)
     o = Optimizer(mu_after, cov, rc, 0.0, mu_short=mu_pre)
     assert o.port_return(np.array([1.5, -0.5])) == pytest.approx(1.5 * 0.08 - 0.5 * 0.05)
 

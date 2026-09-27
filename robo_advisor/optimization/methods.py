@@ -5,7 +5,7 @@ Also:     minimum volatility, maximum Sharpe, target-return minimum volatility,
           CVaR minimization (Rockafellar-Uryasev LP), risk parity, maximum diversification.
 
 Every method honours the client's constraints (long-only or gross-leverage-limited shorts,
-max position) and the mapped-risk volatility cap. Methods whose natural formulation cannot
+per-ETF minimum and maximum positions, category limits) and the mapped-risk volatility cap. Methods whose natural formulation cannot
 carry the quadratic cap (CVaR LP, risk parity, max diversification) are blended toward the
 minimum-volatility portfolio just enough to satisfy it; the feasible set is convex so the
 blend keeps every other constraint.
@@ -231,7 +231,8 @@ class Optimizer:
         return ["long-only by construction (method undefined with short positions)"]
 
     def risk_parity(self) -> OptResult:
-        cov, n, m = self.cov, self.n, self.rc.max_position
+        cov, n = self.cov, self.n
+        lo, hi = self.space.lo, self.space.hi
 
         def f(w):
             sw = cov @ w
@@ -243,12 +244,10 @@ class Optimizer:
             return float(diff @ diff), 2 * drc.T @ diff
 
         cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}] + self._cap_cons_long()
-        iv = 1 / np.sqrt(np.diag(cov))
-        x0 = np.minimum(iv / iv.sum(), m)
-        x0 = x0 / x0.sum()
-        res = minimize(f, x0, jac=True, method="SLSQP", bounds=[(1e-6, m)] * n, constraints=cons,
-                       options={"maxiter": 1000, "ftol": 1e-14})
-        w = self._clean(np.clip(res.x, 0, m))
+        x0 = self.space.fill(1 / np.sqrt(np.diag(cov)))
+        res = minimize(f, x0, jac=True, method="SLSQP", bounds=list(zip(np.maximum(lo, 1e-6), hi)),
+                       constraints=cons, options={"maxiter": 1000, "ftol": 1e-14})
+        w = self._clean(np.clip(res.x, lo, hi))
         w, t = self.blend_to_cap(w)
         notes = self._long_only_space_note(w)
         if t > 0:
@@ -256,7 +255,8 @@ class Optimizer:
         return OptResult(w, "risk_parity", notes)
 
     def max_diversification(self) -> OptResult:
-        cov, n, m = self.cov, self.n, self.rc.max_position
+        cov, n = self.cov, self.n
+        lo, hi = self.space.lo, self.space.hi
         sig = np.sqrt(np.diag(cov))
 
         def f(w):
@@ -265,9 +265,9 @@ class Optimizer:
             return -num / s, -(sig / s - num * (cov @ w) / s**3)
 
         cons = [{"type": "eq", "fun": lambda w: w.sum() - 1, "jac": lambda w: np.ones(n)}] + self._cap_cons_long()
-        res = minimize(f, np.full(n, 1 / n), jac=True, method="SLSQP", bounds=[(0, m)] * n,
+        res = minimize(f, self.space.fill(np.ones(n)), jac=True, method="SLSQP", bounds=list(zip(lo, hi)),
                        constraints=cons, options={"maxiter": 1000, "ftol": 1e-14})
-        w = self._clean(np.clip(res.x, 0, m))
+        w = self._clean(np.clip(res.x, lo, hi))
         w, t = self.blend_to_cap(w)
         notes = self._long_only_space_note(w)
         if t > 0:

@@ -25,7 +25,8 @@
     "equity_comfort": "comfortable",
     "experience": "stocks_etfs",
     "crash_behavior": "held",
-    "preserve_vs_growth": "balance"
+    "preserve_vs_growth": "balance",
+    "risk_attitude": "moderate"
   },
   "universe": ["VOO", "VXUS", "BND", "BIL", "GLD", "TLT", "VNQ", "SCHD", "QQQ"],
   "constraints": {"allow_short": false, "max_position": 0.5},

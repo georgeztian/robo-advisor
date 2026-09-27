@@ -185,6 +185,38 @@ def _amount(prompt: str, default: float | None = None) -> float:
         print("  enter a non-negative amount")
 
 
+def _ask_position_limits(s: Settings, universe: list[str]) -> dict:
+    """Minimum and maximum share of the portfolio for each chosen ETF (defaults from the config)."""
+    d_lo, d_hi = s.optimization.min_position, s.optimization.max_position
+    print(f"\nPosition limits (share of the portfolio each ETF may hold): every ETF between "
+          f"{d_lo:.0%} (minimum) and {d_hi:.0%} (maximum).")
+    print("A minimum of 0 lets the optimizer leave an ETF out; a positive minimum makes sure it is held.")
+    keep = _yes("Keep these position limits for every ETF?", True)
+    while True:
+        per: dict[str, dict] = {}
+        if not keep:
+            for t in universe:
+                while True:
+                    lo = _rate(f"  {t} minimum (fraction, e.g. 0.05 for 5%)", d_lo)
+                    hi = _fraction(f"  {t} maximum (fraction, e.g. 0.5 for 50%)", d_hi)
+                    if lo <= hi:
+                        break
+                    print("  the minimum cannot be above the maximum")
+                lim = ({"min": lo} if lo != d_lo else {}) | ({"max": hi} if hi != d_hi else {})
+                if lim:
+                    per[t] = lim
+        los = [per.get(t, {}).get("min", d_lo) for t in universe]
+        his = [per.get(t, {}).get("max", d_hi) for t in universe]
+        if sum(los) > 1 + 1e-9:
+            print(f"  the minimums add up to {sum(los):.0%}, more than 100%; enter the limits again")
+        elif sum(his) < 1 - 1e-9:
+            print(f"  the maximums add up to only {sum(his):.0%}, so the portfolio cannot be fully invested; "
+                  "enter the limits again (or select more ETFs)")
+        else:
+            return {"position_limits": per} if per else {}
+        keep = False
+
+
 def _ask_category_limits(s: Settings, universe: list[str]) -> dict[str, float]:
     """Show the category limits that apply to the chosen ETFs; let the client change them."""
     cats = [c for c, ts in s.universe.categories.items() if any(t in universe for t in ts)]
@@ -250,7 +282,7 @@ def interactive_client(s: Settings) -> ClientInput:
             opts = list(q.options)
             print(f"{q.text}")
             for i, o in enumerate(opts, 1):
-                print(f"   {i}. {o.replace('_', ' ')}")
+                print(f"   {i}. {q.label(o)}")
             k = _ask("  choice", cast=int, choices=list(range(1, len(opts) + 1)))
             ans[q.id] = opts[k - 1]
         return ans
@@ -260,9 +292,7 @@ def interactive_client(s: Settings) -> ClientInput:
     universe = choose_etfs(s)
     print("\n== Step 5: Constraints ==")
     allow_short = _yes("Are short sales allowed?", False)
-    cons = {"allow_short": allow_short,
-            "max_position": _fraction("Maximum position size per ETF (fraction, e.g. 0.5 for 50%)",
-                                      s.optimization.max_position)}
+    cons = {"allow_short": allow_short, **_ask_position_limits(s, universe)}
     if allow_short:
         cons["max_gross_leverage"] = _at_least_one("Maximum gross exposure L (e.g. 1.5 = 150%)",
                                                    s.optimization.max_gross_leverage)
@@ -426,7 +456,10 @@ def cmd_questionnaire(args) -> int:
         print(f"\n# {block}")
         for q in getattr(s.questionnaire, block):
             note = "  [answered automatically from the goal; leave it out of profiles]" if q.derive_from_goal else ""
-            print(f"- {q.id} (weight {q.weight}): {q.text}{note}\n    options: {q.options}")
+            print(f"- {q.id} (weight {q.weight}): {q.text}{note}")
+            for code, score in q.options.items():
+                label = f"  ({q.labels[code]})" if code in q.labels else ""
+                print(f"    {code}: {score:g}{label}")
     return 0
 
 

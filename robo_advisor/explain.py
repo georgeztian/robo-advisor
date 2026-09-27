@@ -43,12 +43,22 @@ def risk_contributions(w: np.ndarray, cov: np.ndarray) -> np.ndarray:
     return w * (cov @ w) / var if var > 0 else np.zeros_like(w)
 
 
+def _position_limits_text(rc) -> str:
+    """'0%-50% for every ETF' or 'VOO 10%-40%, others 0%-50%'."""
+    pairs = {t: (rc.position_min[t], rc.position_max[t]) for t in rc.tickers}
+    common = max(set(pairs.values()), key=list(pairs.values()).count)
+    fmt = lambda p: f"{p[0]:.0%}-{p[1]:.0%}"                           # noqa: E731
+    if all(p == common for p in pairs.values()):
+        return f"{fmt(common)} for every ETF"
+    return ", ".join(f"{t} {fmt(p)}" for t, p in pairs.items() if p != common) + f", others {fmt(common)}"
+
+
 def _money(x: float) -> str:
     return f"${x:,.0f}"
 
 
 def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port: np.ndarray,
-            max_pos: float, mu: np.ndarray, capped: dict[str, str] | None = None) -> str:
+            pos_min: float, pos_max: float, mu: np.ndarray, capped: dict[str, str] | None = None) -> str:
     t = est.tickers[i]
     if abs(w[i]) < 1e-6:
         held = [j for j in range(len(w)) if w[j] > 1e-6]
@@ -63,8 +73,10 @@ def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port:
                 "with the other holdings; shorting it funds higher-return positions within the "
                 "gross-exposure limit.")
     parts = []
-    if abs(w[i] - max_pos) < 1e-4:
-        parts.append(f"at the {max_pos:.0%} position cap")
+    if abs(w[i] - pos_max) < 1e-4:
+        parts.append(f"at its {pos_max:.0%} maximum position")
+    elif pos_min > 0 and abs(w[i] - pos_min) < 1e-4:
+        parts.append(f"held at its {pos_min:.0%} minimum position")
     if capped and t in capped:
         parts.append(capped[t])
     if est.sigma[i] < 0.03:
@@ -106,7 +118,9 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             "Est. return": mu[i], "Volatility": est.sigma[i], "Corr. to portfolio": corr_to_port[i],
             "Risk contribution": rc[i], "History (yrs)": est.history_years[t],
             "Expense ratio": CATALOG[t].expense_ratio,
-            "Rationale": _reason(i, w, est, rc, corr_to_port, port.constraints.max_position, mu, capped),
+            "Min position": port.constraints.position_min[t], "Max position": port.constraints.position_max[t],
+            "Rationale": _reason(i, w, est, rc, corr_to_port, port.constraints.position_min[t],
+                                 port.constraints.position_max[t], mu, capped),
         })
     table = pd.DataFrame(rows).set_index("ETF")
 
@@ -179,7 +193,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         f"Inflation assumption: {inflation:.1%} per year (real value of the deterministic projection: "
         f"{_money(proj.fv_real)}).",
         f"Constraints: {'short sales allowed, gross exposure <= ' + format(port.constraints.max_gross_leverage, '.0%') if port.constraints.allow_short else 'long-only'}"
-        f", max position {port.constraints.max_position:.0%}, max volatility {port.constraints.max_volatility:.0%}"
+        f", position limits {_position_limits_text(port.constraints)}, max volatility {port.constraints.max_volatility:.0%}"
         + (", category limits " + ", ".join(f"{c.category} {c.limit:.0%}" for c in port.constraints.category_caps)
            if port.constraints.category_caps else "") + ".",
         "Scenario shifts: " + "; ".join(f"{s.name} {s.mu_shift:+.1%} return, x{s.vol_multiplier:.2f} volatility"

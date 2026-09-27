@@ -21,6 +21,7 @@ from ..explain import explain
 from ..graph.engine import Graph, Node
 from ..models import (CategoryCap, ClientInput, MarketData, Portfolio, Request, ResolvedConstraints,
                       TaxContext)
+from ..optimization.formulation import describe_optimization
 from ..optimization.goal import goal_search
 from ..optimization.methods import METHODS, Optimizer
 from ..projection import project
@@ -198,13 +199,31 @@ class ConstraintAgent:
         caps = [CategoryCap(cat, lim, [t for t in tickers if t in req.tickers])
                 for cat, tickers in s.universe.categories.items()
                 if (lim := limits.get(cat, 1.0)) < 1.0 and any(t in req.tickers for t in tickers)]
+        lo, hi = resolve_position_limits(c, o, req.tickers)
         rc = ResolvedConstraints(
-            tickers=req.tickers, allow_short=c.allow_short,
-            max_position=c.max_position if c.max_position is not None else o.max_position,
+            tickers=req.tickers, allow_short=c.allow_short, position_min=lo, position_max=hi,
             max_gross_leverage=(c.max_gross_leverage if c.max_gross_leverage is not None
                                 else o.max_gross_leverage) if c.allow_short else 1.0,
             max_volatility=risk.max_volatility, category_caps=caps)
         return {"constraints": rc}
+
+
+def resolve_position_limits(c, o, tickers: list[str]) -> tuple[dict[str, float], dict[str, float]]:
+    """Per-ETF [min, max] weights: per-ETF override, else the client's default, else the config's."""
+    per = {k.strip().upper(): v for k, v in (c.position_limits or {}).items()}
+    unknown = sorted(set(per) - set(tickers))
+    if unknown:
+        raise ValueError(f"position_limits names ETFs that are not selected: {unknown}; selected: {', '.join(tickers)}")
+    d_lo = c.min_position if c.min_position is not None else o.min_position
+    d_hi = c.max_position if c.max_position is not None else o.max_position
+    lo, hi = {}, {}
+    for t in tickers:
+        pl = per.get(t)
+        lo[t] = pl.min if pl is not None and pl.min is not None else d_lo
+        hi[t] = pl.max if pl is not None and pl.max is not None else d_hi
+        if lo[t] > hi[t]:
+            raise ValueError(f"{t}: minimum position {lo[t]:.0%} is above its maximum {hi[t]:.0%}")
+    return lo, hi
 
 
 class OptimizerAgent:
@@ -337,6 +356,9 @@ class ExplainerAgent:
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
                       st["market"].synthetic, s.simulation.inflation, s.data.lookback_years,
                       s.universe.categories)
+        exp.optimization = describe_optimization(st["request"], st["risk"], st["estimates"], st["tax"],
+                                                 st["portfolio"], st["simulation"], s.optimization.n_starts,
+                                                 s.optimization.cvar_alpha)
         prs = portfolio_risk_stats(st["portfolio"].weights, st["estimates"], s.estimation.var_confidence)
         return {"explanation": exp, "portfolio_risk": prs}
 

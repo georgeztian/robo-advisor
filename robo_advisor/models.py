@@ -11,12 +11,18 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --------------------------------------------------------------------------- client input
 
 
-class Goal(BaseModel):
+class _Input(BaseModel):
+    """Client-profile section: unknown keys are errors, so a typo is reported instead of ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class Goal(_Input):
     """Spec §1A. With a target, the optimizer minimizes risk subject to reaching it (Case A);
     without one, it maximizes expected return subject to the mapped risk limit (Case B)."""
 
@@ -50,11 +56,27 @@ class Goal(BaseModel):
         return max(1, int(round(self.horizon_years * 12)))
 
 
-class Constraints(BaseModel):
+class PositionLimit(_Input):
+    """Per-ETF position size bounds (fractions of the portfolio); None -> the client/config default."""
+
+    min: float | None = Field(None, ge=0, lt=1)
+    max: float | None = Field(None, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def _min_le_max(self):
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError(f"position limit min {self.min} is above max {self.max}")
+        return self
+
+
+class Constraints(_Input):
     """Spec §4."""
 
     allow_short: bool = False
-    max_position: float | None = Field(None, gt=0, le=1)       # None -> config default
+    min_position: float | None = Field(None, ge=0, lt=1)       # default minimum per ETF; None -> config
+    max_position: float | None = Field(None, gt=0, le=1)       # default maximum per ETF; None -> config
+    # per-ETF overrides, e.g. {"VOO": {"min": 0.1, "max": 0.4}}
+    position_limits: dict[str, PositionLimit] | None = None
     max_gross_leverage: float | None = Field(None, ge=1)       # None -> config default
     # max share of the portfolio per ETF category, e.g. {"Crypto ETFs": 0.05}; overrides the
     # config defaults for the categories given (1.0 removes a limit)
@@ -65,10 +87,12 @@ class Constraints(BaseModel):
         for cat, lim in (self.category_limits or {}).items():
             if not 0 < lim <= 1:
                 raise ValueError(f"category limit for {cat!r} must be in (0, 1], got {lim}")
+        if self.min_position is not None and self.max_position is not None and self.min_position > self.max_position:
+            raise ValueError(f"min_position {self.min_position} is above max_position {self.max_position}")
         return self
 
 
-class TaxInput(BaseModel):
+class TaxInput(_Input):
     """Spec §5. Rates left as None fall back to config defaults."""
 
     enabled: bool = False
@@ -80,7 +104,7 @@ class TaxInput(BaseModel):
     liquidate_at_horizon: bool | None = None
 
 
-class Preferences(BaseModel):
+class Preferences(_Input):
     optimization_method: str | None = None             # None -> config default
     target_return: float | None = None                 # for the target_return method (Case B)
     goal_risk_metric: Literal["volatility", "cvar"] | None = None
@@ -99,7 +123,7 @@ class ClientProfile(BaseModel):
     notes: str | None = None
 
 
-class ClientInput(BaseModel):
+class ClientInput(_Input):
     profile: ClientProfile = ClientProfile()
     as_of: dt.date | None = None
     goal: Goal
@@ -137,10 +161,17 @@ class CategoryCap:
 class ResolvedConstraints:
     tickers: list[str]
     allow_short: bool
-    max_position: float
+    position_min: dict[str, float]      # per ETF: w_i >= min (a positive min also rules out shorting it)
+    position_max: dict[str, float]      # per ETF: |w_i| <= max
     max_gross_leverage: float           # 1.0 when long-only
     max_volatility: float
     category_caps: list[CategoryCap] = field(default_factory=list)
+
+    def lower(self) -> np.ndarray:
+        return np.array([self.position_min[t] for t in self.tickers])
+
+    def upper(self) -> np.ndarray:
+        return np.array([self.position_max[t] for t in self.tickers])
 
 
 @dataclass
@@ -358,3 +389,4 @@ class Explanation:
     limitations: list[str]
     disclosures: list[str]
     calculations: dict[str, Any]
+    optimization: dict[str, Any] = field(default_factory=dict)   # the problem solved, in math and plain words
