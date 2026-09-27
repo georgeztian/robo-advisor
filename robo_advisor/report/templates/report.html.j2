@@ -152,7 +152,7 @@ ol.steps li { margin: 6px 0; }
 {% set o = exp.optimization %}
 <section>
   <h2>How the optimizer chose this allocation</h2>
-  <h3>In plain English</h3>
+  <h3>Simple explanation</h3>
   <p>{{ o.summary }}</p>
   <p><b>Goal.</b> {{ o.objective.plain }}</p>
   <ul>{% for r in o.rules_plain %}<li>{{ r|safe }}</li>{% endfor %}</ul>
@@ -167,14 +167,15 @@ ol.steps li { margin: 6px 0; }
     <tr class="head"><th>Constraint</th><th>Mathematical form</th><th>What it means</th><th>Recommended portfolio</th></tr>
     {% for c in o.constraints %}<tr><td><b>{{ c.name }}</b></td><td class="math">{{ c.math|safe }}</td><td>{{ c.plain|safe }}</td><td data-label="Recommended portfolio">{{ c.status|safe }}</td></tr>{% endfor %}
   </table></div>
+  <h3>What the symbols mean</h3>
+  <table>
+    {% for sym, meaning in o.symbols %}<tr><td class="math" style="min-width:0;white-space:nowrap">{{ sym|safe }}</td><td>{{ meaning|safe }}</td></tr>{% endfor %}
+  </table>
   <h3>Position limits for each ETF</h3>
   <div class="scroll"><table><tr><th>ETF</th><th class="num">Minimum <span class="math"><i>l</i><sub><i>i</i></sub></span></th><th class="num">Recommended <span class="math"><i>w</i><sub><i>i</i></sub></span></th><th class="num">Maximum <span class="math"><i>u</i><sub><i>i</i></sub></span></th></tr>
   {% for r in o.positions %}<tr><td>{{ r.ticker }}</td><td class="num">{{ "%.0f%%"|format(r.min*100) }}</td><td class="num">{{ "%.1f%%"|format(r.weight*100) }}</td><td class="num">{{ "%.0f%%"|format(r.max*100) }}</td></tr>{% endfor %}
   </table></div>
   {% for n in o.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
-  <details><summary>What the symbols mean</summary><table>
-    {% for sym, meaning in o.symbols %}<tr><td class="math" style="min-width:0;white-space:nowrap">{{ sym|safe }}</td><td>{{ meaning|safe }}</td></tr>{% endfor %}
-  </table></details>
 </section>
 
 <section>

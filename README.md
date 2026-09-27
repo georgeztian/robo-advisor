@@ -262,10 +262,10 @@ From top to bottom:
 - **Risk profile:** the capacity, tolerance and mapped scores, and the questionnaire scoring.
 - **Recommended portfolio:** each ETF's category, weight, initial and monthly dollars, and why
   it was chosen; the allocation by category; ETFs considered but not held.
-- **How the optimizer chose this allocation:** the problem in plain English, the steps the
-  optimizer took, the problem in mathematical form with every constraint (and where the
-  recommended portfolio sits against each one), each ETF's minimum and maximum, and what the
-  symbols mean.
+- **How the optimizer chose this allocation:** a simple explanation, the steps the optimizer
+  took, the problem in mathematical form with every constraint (and where the recommended
+  portfolio sits against each one) and what each symbol means (including the covariance matrix
+  **V**, built from the ETFs' volatilities and correlations), and each ETF's minimum and maximum.
 - **Financial projection:** the Monte Carlo range, the terminal-value distribution against the
   target, and the scenarios.
 - **S&P 500 comparison:** the last 10 years with the same money invested.
