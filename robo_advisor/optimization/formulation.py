@@ -19,7 +19,8 @@ TOL = 1e-4
 W = "<i>w</i>"
 WI = "<i>w</i><sub><i>i</i></sub>"
 MU_W = "<i>μ</i><sup>⊤</sup><i>w</i>"
-VAR = "<i>w</i><sup>⊤</sup>Σ<i>w</i>"
+COV = "<b>V</b>"          # covariance matrix: a distinct letter, so it can't be mistaken for ∑ (sum)
+VAR = f"<i>w</i><sup>⊤</sup>{COV}<i>w</i>"
 VOL = "σ<sub><i>p</i></sub>(<i>w</i>)"
 PROB = "P(<i>F</i><sub><i>T</i></sub>(<i>w</i>) ≥ <i>F</i><sup>*</sup>)"
 
@@ -65,7 +66,7 @@ def _objective(port: Portfolio, req: Request, alpha: float) -> tuple[str, str, s
                 f"has the smallest average loss in the worst {tail} of months")
     if m == "risk_parity":
         return (f"minimize over {W}: &nbsp;∑<sub><i>i</i></sub> (<i>RC</i><sub><i>i</i></sub> − 1/<i>n</i>)<sup>2</sup>, "
-                f"&nbsp;<i>RC</i><sub><i>i</i></sub> = {WI}(Σ<i>w</i>)<sub><i>i</i></sub> / {VAR}",
+                f"&nbsp;<i>RC</i><sub><i>i</i></sub> = {WI}({COV}<i>w</i>)<sub><i>i</i></sub> / {VAR}",
                 "Make every ETF contribute an equal share of the portfolio's total risk.",
                 "spreads the risk most evenly across your ETFs")
     if m == "max_diversification":
@@ -181,15 +182,20 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
         ("<i>μ</i><sub><i>i</i></sub>", "estimated yearly return of ETF <i>i</i> from its price history"
          + ((" (after tax; a short position pays the pre-tax return)" if rc.allow_short else " (after tax)")
             if after_tax else "")),
-        ("Σ", "the covariance matrix: how much each ETF moves and how the ETFs move together"),
+        ("∑", "“sum of”: adds up the terms for the ETFs named underneath it"),
+        ("σ<sub><i>i</i></sub>", "the volatility of ETF <i>i</i> on its own: the typical size of its yearly ups and downs"),
+        ("<i>ρ</i><sub><i>ij</i></sub>", "the correlation between ETFs <i>i</i> and <i>j</i>, from −1 to +1: how closely "
+         "they move together (+1 in lockstep, 0 unrelated, −1 opposite)"),
+        (COV, f"the covariance matrix: a table with one row and one column per ETF ({n} × {n}), built from the "
+              "volatilities and correlations; the entry for ETFs <i>i</i> and <i>j</i> is "
+              "σ<sub><i>i</i></sub> σ<sub><i>j</i></sub> <i>ρ</i><sub><i>ij</i></sub>. "
+              "It measures how much the ETFs move and how they move together"),
         (VOL, "the portfolio's volatility: the typical size of its yearly ups and downs"),
         ("<i>l</i><sub><i>i</i></sub>, <i>u</i><sub><i>i</i></sub>", "the minimum and maximum share for ETF <i>i</i>"),
         ("σ<sub>max</sub>", "the highest volatility your risk profile allows"),
     ]
     if port.method == "max_sharpe":
         symbols.append(("<i>r</i><sub><i>f</i></sub>", f"the risk-free rate ({_pct(est.risk_free, 2)} per year)"))
-    if port.method == "max_diversification":
-        symbols.append(("σ<sub><i>i</i></sub>", "the volatility of ETF <i>i</i> on its own"))
     if port.method == "cvar":
         symbols.append(("<i>r</i><sub><i>s</i></sub>", "the ETFs' returns in historical month <i>s</i> (<i>S</i> months in total)"))
         symbols.append(("<i>ζ</i>", "a helper variable; at the optimum it equals the loss threshold of the worst months"))

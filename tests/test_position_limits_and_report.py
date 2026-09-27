@@ -92,10 +92,16 @@ def test_goal_report_writes_out_the_problem(limited_run):
     o = limited_run.state["explanation"].optimization
     assert _ids(limited_run) == ["budget", "positions", "no_short", "categories", "risk", "target"]
     assert "minimize" in o["objective"]["math"] and o["objective"]["plain"] and o["summary"]
+    # the covariance matrix has its own letter (never Σ, which reads like the ∑ summation sign),
+    # and the symbol list defines it, the correlations it is built from, and the summation sign
+    assert "Σ" not in o["objective"]["math"] + "".join(c["math"] for c in o["constraints"])
+    meanings = {sym: text for sym, text in o["symbols"]}
+    assert "covariance matrix" in meanings["<b>V</b>"] and "correlation" in meanings["<i>ρ</i><sub><i>ij</i></sub>"]
+    assert "sum" in meanings["∑"]
     bnd = next(r for r in o["positions"] if r["ticker"] == "BND")
     assert (bnd["min"], bnd["max"]) == (0.15, 0.30)
     html = render(limited_run)
-    for text in ("How the optimizer chose this allocation", "In plain English", "The optimization problem",
+    for text in ("How the optimizer chose this allocation", "Simple explanation", "The optimization problem",
                  "Position limits for each ETF", "What the symbols mean"):
         assert text in html
 
