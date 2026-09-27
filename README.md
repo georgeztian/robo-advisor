@@ -40,7 +40,7 @@ a report is produced.
 |---|---|
 | Equity ETFs | SPY, VOO, VTI, QQQ, VTV, VB |
 | Bond ETFs | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
-| Risk-free Short-term Treasury ETFs | SGOV |
+| Risk-free Short-term Treasury ETFs | BIL, SGOV |
 | Commodity ETFs | GLD, SLV |
 | International Equity ETFs | VXUS, IEFA, VWO |
 | Real Estate ETFs | VNQ, SCHH |
@@ -133,10 +133,9 @@ This first command then prints the ETF menu. Seeing the menu means the installat
 ```
 ./ra data
 ```
-This downloads about 20 years of real daily prices from Yahoo Finance for every ETF on the menu,
-plus two series always used behind the scenes: VOO as the S&P 500 benchmark, and BIL (SPDR 1-3
-Month T-Bill ETF) for the risk-free rate. BIL is not on the menu, so clients can't select it;
-it is only used to measure the T-bill rate over the full 20 years. It then validates the data and prints a table ending in `Data OK.`
+This downloads about 20 years of real daily prices from Yahoo Finance for every ETF on the menu.
+Two of them are also always used behind the scenes, whether or not a client selects them: VOO
+as the S&P 500 benchmark, and BIL as the T-bill risk-free proxy. It then validates the data and prints a table ending in `Data OK.`
 
 The prices are cached in `.cache/prices/`, so later runs are fast and work offline. Re-run
 this command whenever you want to check the data. Every analysis also refreshes the cache
