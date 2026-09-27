@@ -151,6 +151,8 @@ def histogram(values: Sequence[float], target: float | None, bins: int = 40,
     lo, hi = vals[int(0.005 * len(vals))], vals[int(0.995 * len(vals)) - 1]
     if target is not None:
         lo, hi = min(lo, target * 0.9), max(hi, target * 1.1)
+    if hi <= lo:                                   # every outcome identical: give the bar some width
+        lo, hi = lo - max(abs(lo) * 0.05, 1.0), hi + max(abs(hi) * 0.05, 1.0)
     width = (hi - lo) / bins
     counts = [0] * bins
     for v in vals:

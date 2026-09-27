@@ -77,6 +77,7 @@ class Ticker:
     def history(self, period="1mo", interval="1d", auto_adjust=True, actions=True, repair=False,
                 raise_errors=False, **kw) -> pd.DataFrame:
         assert period == "max" and interval == "1d" and auto_adjust is False and actions is True
+        assert raise_errors, "the provider must ask yfinance to raise instead of returning empty data"
         CALLS[self.symbol] = CALLS.get(self.symbol, 0) + 1
         if repair and REPAIR_LIBS_MISSING:     # what yfinance does without scikit-learn
             raise ModuleNotFoundError("No module named 'sklearn'", name="sklearn")
