@@ -49,6 +49,7 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
     ETFInfo("SCHP", "Schwab U.S. TIPS ETF", "US Inflation-Protected Treasuries", D(2010, 8, 5), 0.0003, "interest", 0.0),
     ETFInfo("BNDX", "Vanguard Total International Bond ETF (USD Hedged)", "International Bonds", D(2013, 5, 31), 0.0007, "interest", 0.0),
     # Risk-free short-term Treasuries
+    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "interest", 0.0),
     ETFInfo("SGOV", "iShares 0-3 Month Treasury Bond ETF", "T-Bills (Cash)", D(2020, 5, 26), 0.0009, "interest", 0.0),
     # Commodities
     ETFInfo("GLD", "SPDR Gold Shares", "Gold", D(2004, 11, 18), 0.0040, "none", 0.0, collectible=True),
@@ -73,8 +74,6 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
             risk_note=_OPTION_INCOME),
     # Crypto
     ETFInfo("IBIT", "iShares Bitcoin Trust ETF", "Bitcoin", D(2024, 1, 11), 0.0025, "none", 0.0, risk_note=_CRYPTO),
-    # Not offered to clients: the T-bill series behind the default risk-free rate (data.risk_free_ticker)
-    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "interest", 0.0),
 ]}
 
 

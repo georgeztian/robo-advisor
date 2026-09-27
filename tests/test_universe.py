@@ -12,7 +12,7 @@ from robo_advisor.universe import CATALOG, RISK_NOTE_PREFIX, UniverseError, cate
 EXPECTED = {
     "Equity ETFs": ["SPY", "VOO", "VTI", "QQQ", "VTV", "VB"],
     "Bond ETFs": ["BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX"],
-    "Risk-free Short-term Treasury ETFs": ["SGOV"],
+    "Risk-free Short-term Treasury ETFs": ["BIL", "SGOV"],
     "Commodity ETFs": ["GLD", "SLV"],
     "International Equity ETFs": ["VXUS", "IEFA", "VWO"],
     "Real Estate ETFs": ["VNQ", "SCHH"],
@@ -25,10 +25,9 @@ EXPECTED = {
 def test_configured_universe_is_the_agreed_list(settings):
     assert settings.universe.categories == EXPECTED
     assert len(settings.universe.tickers) == len(set(settings.universe.tickers))
-    # the catalog is the menu plus the risk-free data series, which is fetched but not offered
-    assert set(CATALOG) == set(settings.universe.tickers) | {settings.data.risk_free_ticker}
-    assert settings.data.risk_free_ticker not in settings.universe.tickers
-    for gone in ("TQQQ", "BIL", "JEPQ"):
+    assert set(CATALOG) == set(settings.universe.tickers)          # catalog has no stale or missing ETFs
+    assert settings.data.risk_free_ticker in settings.universe.tickers
+    for gone in ("TQQQ", "JEPQ"):
         with pytest.raises(UniverseError):
             resolve_universe([gone], settings.universe.categories)
 
@@ -52,8 +51,8 @@ def test_resolve_by_category_and_ticker():
 
 
 def test_interactive_selection_by_category(settings, monkeypatch, capsys):
-    # Equity: 1,2 | Bond: all | Treasury: bad input then 1 | the rest skipped
-    answers = iter(["1,2", "all", "9", "1", "", "", "", "", "", ""])
+    # Equity: 1,2 | Bond: all | Treasury: bad input then 2 | the rest skipped
+    answers = iter(["1,2", "all", "9", "2", "", "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert choose_etfs(settings) == ["SPY", "VOO", "BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX", "SGOV"]
     assert "Investment universe (ETFs by category)" in capsys.readouterr().out

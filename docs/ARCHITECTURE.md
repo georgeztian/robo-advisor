@@ -125,7 +125,7 @@ taxes, missing disclosures and a misreported probability.
   |---|---|
   | Equity | SPY, VOO, VTI, QQQ, VTV, VB |
   | Bond | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
-  | Risk-free Short-term Treasury | SGOV |
+  | Risk-free Short-term Treasury | BIL, SGOV |
   | Commodity | GLD, SLV |
   | International Equity | VXUS, IEFA, VWO |
   | Real Estate | VNQ, SCHH |
@@ -136,8 +136,7 @@ taxes, missing disclosures and a misreported probability.
   `robo_advisor/universe.py` holds each ETF's facts: inception date, expense ratio, tax
   character of its distributions (interest, federally tax-exempt municipal interest for VTEB,
   qualified or mixed dividends, REIT income), collectible status (GLD, SLV), and a special-risk
-  note (the option-income ETFs, IBIT). The config is validated against the catalog, which also
-  holds BIL: the risk-free series, fetched but not offered to clients. Clients
+  note (the option-income ETFs, IBIT). The config is validated against the catalog. Clients
   choose ETFs by category: the interactive questionnaire goes category by category, and a
   profile file lists tickers and/or category names. There is no implicit "all ETFs" default.
   This list replaces the ETF list in spec §3.
@@ -148,8 +147,8 @@ taxes, missing disclosures and a misreported probability.
     (the test suite uses it); reports are watermarked SYNTHETIC.
   - The risk-free rate can come from FRED (`DTB3`) instead of BIL.
 * **Benchmark.** VOO (S&P 500 total return) is always fetched for the §14 comparison, whether
-  or not the client selected it. BIL is always fetched as the T-bill risk-free proxy; it is not
-  on the client menu (SGOV, the menu's T-bill ETF, has too short a history for a 20-year rate).
+  or not the client selected it. BIL is always fetched as the T-bill risk-free proxy
+  (SGOV's history is too short for a 20-year rate).
 
 ## Key modelling decisions
 
