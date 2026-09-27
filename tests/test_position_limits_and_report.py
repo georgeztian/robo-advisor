@@ -154,7 +154,7 @@ def test_tax_rate_table_per_etf(settings, provider):
         assert sum(by[t]["lt"]) == pytest.approx(tax.rates.lt[i])
         assert sum(by[t]["st"]) == pytest.approx(tax.rates.st)
     html = render(res)
-    assert "Tax rates applied to each selected ETF" in html and "Rate schedule" in html
+    assert "<summary>Tax rates</summary>" in html and "Rate schedule" in html
     assert "R-TAX-03" in {f.rule_id for r in res.latest_reviews() for f in r.findings if f.passed}
 
 
