@@ -279,7 +279,7 @@ class OptimizerAgent:
 
 
 class SimulationAgent:
-    """Step 9: Monte Carlo projection (10,000 paths)."""
+    """Step 9: Monte Carlo projection (simulation.n_paths paths)."""
 
     name, requires, provides = "simulation", ("request", "estimates", "tax", "portfolio", "review_portfolio"), ("simulation",)
 
@@ -312,7 +312,7 @@ class ScenarioAgent:
 
 
 class BenchmarkAgent:
-    """Step 10: S&P 500 comparison over the most recent 10 years."""
+    """Step 10: S&P 500 comparison over the most recent benchmark.years years."""
 
     name, requires, provides = "benchmark", ("request", "market", "portfolio", "review_portfolio"), ("benchmark",)
 
@@ -357,8 +357,9 @@ class ExplainerAgent:
         s = self.sv.settings
         exp = explain(st["request"], st["risk"], st["estimates"], st["tax"], st["portfolio"], st["simulation"],
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
-                      st["market"].synthetic, s.simulation.inflation, s.data.lookback_years, s.data.min_history_years,
-                      s.universe.categories)
+                      st["market"].synthetic, s.simulation.inflation, lookback_years=s.data.lookback_years,
+                      min_history_years=s.data.min_history_years, cvar_alpha=s.optimization.cvar_alpha,
+                      categories=s.universe.categories)
         exp.optimization = describe_optimization(st["request"], st["risk"], st["estimates"], st["tax"],
                                                  st["portfolio"], st["simulation"], s.optimization.n_starts,
                                                  s.optimization.cvar_alpha)

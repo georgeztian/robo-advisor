@@ -5,10 +5,10 @@ Also:     minimum volatility, maximum Sharpe, target-return minimum volatility,
           CVaR minimization (Rockafellar-Uryasev LP), risk parity, maximum diversification.
 
 Every method honours the client's constraints (long-only or gross-leverage-limited shorts,
-per-ETF minimum and maximum positions, category limits) and the mapped-risk volatility cap. Methods whose natural formulation cannot
-carry the quadratic cap (CVaR LP, risk parity, max diversification) are blended toward the
-minimum-volatility portfolio just enough to satisfy it; the feasible set is convex so the
-blend keeps every other constraint.
+per-ETF minimum and maximum positions, category limits) and the mapped-risk volatility cap.
+Methods whose natural formulation cannot carry the quadratic cap (CVaR LP, risk parity, max
+diversification) are blended toward the minimum-volatility portfolio just enough to satisfy
+it; the feasible set is convex so the blend keeps every other constraint.
 """
 from __future__ import annotations
 
@@ -23,23 +23,35 @@ from .constraints import InfeasibleError, Space
 METHODS = ("mean_variance", "min_volatility", "max_sharpe", "cvar", "target_return",
            "risk_parity", "max_diversification")
 
-# Plain-language descriptions shown to clients (questionnaire, README). Every method keeps the
-# portfolio within the client's risk limit and position / category limits.
-METHOD_DESCRIPTIONS = {
-    "mean_variance": "Highest expected return within your risk limit (recommended; the classic approach)",
-    "min_volatility": "Smallest ups and downs possible, whatever the return",
-    "max_sharpe": "Best return per unit of risk (Sharpe ratio)",
-    "cvar": "Smallest average loss in the worst 5% of months (tail-risk focus)",
-    "target_return": "Smallest ups and downs that still earn a return you choose",
-    "risk_parity": "Every ETF contributes the same share of total risk (balanced, long-only)",
-    "max_diversification": "Most diversified mix: least overlap between the ETFs' movements (long-only)",
-}
-GOAL_RISK_METRICS = {
-    "volatility": "Volatility: how much the portfolio value moves up and down (recommended)",
-    "cvar": "Tail risk (CVaR): the average final value in the worst 5% of simulated futures",
-}
 
+
+def method_descriptions(cvar_alpha: float = 0.95) -> dict[str, str]:
+    """Plain-language descriptions shown to clients (questionnaire menu, report). Every method
+    keeps the portfolio within the client's risk limit and position / category limits."""
+    tail = f"{1 - cvar_alpha:.0%}"
+    return {
+        "mean_variance": "Highest expected return within your risk limit (recommended; the classic approach)",
+        "min_volatility": "Smallest ups and downs possible, whatever the return",
+        "max_sharpe": "Best return per unit of risk (Sharpe ratio)",
+        "cvar": f"Smallest average loss in the worst {tail} of months (tail-risk focus)",
+        "target_return": "Smallest ups and downs that still earn a return you choose",
+        "risk_parity": "Every ETF contributes the same share of total risk (balanced, long-only)",
+        "max_diversification": "Most diversified mix: least overlap between the ETFs' movements (long-only)",
+    }
+
+
+def goal_risk_metrics(cvar_alpha: float = 0.95) -> dict[str, str]:
+    """How a target client's risk can be measured (questionnaire menu)."""
+    return {
+        "volatility": "Volatility: how much the portfolio value moves up and down (recommended)",
+        "cvar": f"Tail risk (CVaR): the average final value in the worst {1 - cvar_alpha:.0%} of simulated futures",
+    }
+
+
+# Short method names for the report (the goal_* methods are the target-client search).
 METHOD_LABELS = {
+    "goal_min_volatility": "Target-based: minimize volatility subject to P(terminal wealth >= target) >= p",
+    "goal_min_cvar": "Target-based: minimize CVaR of terminal wealth subject to P(terminal wealth >= target) >= p",
     "mean_variance": "Mean-variance: maximize expected return subject to the volatility limit",
     "min_volatility": "Minimum volatility",
     "max_sharpe": "Maximum Sharpe ratio (subject to the volatility limit)",

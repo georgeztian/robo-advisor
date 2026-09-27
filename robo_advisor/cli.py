@@ -24,7 +24,7 @@ from .data.providers import DataUnavailableError, make_provider
 from .data.validation import validate
 from .graph.engine import GraphHalted
 from .models import ClientInput
-from .optimization.methods import GOAL_RISK_METRICS, METHOD_DESCRIPTIONS
+from .optimization.methods import goal_risk_metrics, method_descriptions
 from .universe import CATALOG
 from .report.html import audit_bundle, render
 
@@ -247,12 +247,12 @@ def _ask_optimizer(s: Settings, has_target: bool) -> dict:
                 break
             print("  enter a percentage between 1 and 99, e.g. 80 for 80%")
         prefs["target_probability"] = p / 100
-        prefs["goal_risk_metric"] = _menu("How should risk be measured?", GOAL_RISK_METRICS,
+        prefs["goal_risk_metric"] = _menu("How should risk be measured?", goal_risk_metrics(s.optimization.cvar_alpha),
                                           s.optimization.goal.risk_metric)
         return prefs
     print("Without a target, choose how the portfolio is built. Every option stays within your risk\n"
           "limit and the position / category limits.")
-    prefs["optimization_method"] = _menu("Optimization method:", METHOD_DESCRIPTIONS,
+    prefs["optimization_method"] = _menu("Optimization method:", method_descriptions(s.optimization.cvar_alpha),
                                          s.optimization.default_method)
     if prefs["optimization_method"] == "target_return":
         while True:
