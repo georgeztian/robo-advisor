@@ -98,6 +98,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         reviews=reviews, superseded=superseded, review_ok=review_ok,
         review_summary=f"{passed}/{n} checks passed" + (
             f" (after {len(superseded)} remediated attempt(s))" if superseded else ""),
+        var_pct=f"{(s.estimation.var_confidence if s else 0.95):.0%}",
         tax=st["tax"], tax_labels=SCHEDULE_LABELS, pct=lambda v: f"{v:.1%}",
         trace=result.trace, mermaid=mermaid, disclaimer=REPORT_DISCLAIMER,
         calculations=json.dumps(exp.calculations, indent=2, default=_json_default))

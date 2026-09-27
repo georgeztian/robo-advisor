@@ -147,7 +147,7 @@ table.taxes td.num, table.taxes th.num { min-width: 64px; }
   </table></div></details>{% endif %}
   <h3>Historical downside risk of this allocation</h3>
   <p class="sub">Since {{ prisk.common_start }} (common history of held ETFs): max drawdown {{ "%.1f%%"|format(prisk.max_drawdown*100) }},
-    daily 95% VaR {{ "%.2f%%"|format(prisk.var_daily*100) }}, daily 95% CVaR {{ "%.2f%%"|format(prisk.cvar_daily*100) }},
+    daily {{ var_pct }} VaR {{ "%.2f%%"|format(prisk.var_daily*100) }}, daily {{ var_pct }} CVaR {{ "%.2f%%"|format(prisk.cvar_daily*100) }},
     downside deviation {{ "%.1f%%"|format(prisk.downside_dev*100) }}.</p>
 </section>
 
@@ -231,7 +231,7 @@ table.taxes td.num, table.taxes th.num { min-width: 64px; }
   <h3>Disclosures</h3><ul>{% for m in exp.disclosures %}<li>{{ m }}</li>{% endfor %}</ul>
   <details><summary>Underlying calculations</summary><pre>{{ calculations }}</pre></details>
   <details><summary>Parameter estimates for all selected ETFs (historical)</summary><div class="scroll"><table>
-    <tr><th>ETF</th><th class="num">Years</th><th class="num">Exp. return</th><th class="num">CAGR</th><th class="num">Vol</th><th class="num">Downside dev</th><th class="num">Max DD</th><th class="num">VaR 95% (d)</th><th class="num">CVaR 95% (d)</th><th class="num">Beta</th><th class="num">Sharpe</th><th class="num">Sortino</th><th class="num">Yield</th></tr>
+    <tr><th>ETF</th><th class="num">Years</th><th class="num">Exp. return</th><th class="num">CAGR</th><th class="num">Vol</th><th class="num">Downside dev</th><th class="num">Max DD</th><th class="num">VaR {{ var_pct }} (d)</th><th class="num">CVaR {{ var_pct }} (d)</th><th class="num">Beta</th><th class="num">Sharpe</th><th class="num">Sortino</th><th class="num">Yield</th></tr>
     {% for t, r in stats_rows %}<tr><td>{{ t }}</td><td class="num">{{ "%.1f"|format(r.years) }}</td><td class="num">{{ "%.1f%%"|format(r.exp_return*100) }}</td><td class="num">{{ "%.1f%%"|format(r.cagr*100) }}</td><td class="num">{{ "%.1f%%"|format(r.volatility*100) }}</td><td class="num">{{ "%.1f%%"|format(r.downside_dev*100) }}</td><td class="num">{{ "%.0f%%"|format(r.max_drawdown*100) }}</td><td class="num">{{ "%.2f%%"|format(r.var_daily*100) }}</td><td class="num">{{ "%.2f%%"|format(r.cvar_daily*100) }}</td><td class="num">{{ "%.2f"|format(r.beta) }}</td><td class="num">{{ "%.2f"|format(r.sharpe) }}</td><td class="num">{{ "%.2f"|format(r.sortino) }}</td><td class="num">{{ "%.1f%%"|format(r.income_yield*100) }}</td></tr>{% endfor %}
   </table></div>
   <h3>Correlations</h3><div class="scroll"><table><tr><th></th>{% for t in corr_tickers %}<th class="num">{{ t }}</th>{% endfor %}</tr>

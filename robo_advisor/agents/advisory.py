@@ -357,7 +357,7 @@ class ExplainerAgent:
         s = self.sv.settings
         exp = explain(st["request"], st["risk"], st["estimates"], st["tax"], st["portfolio"], st["simulation"],
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
-                      st["market"].synthetic, s.simulation.inflation, s.data.lookback_years,
+                      st["market"].synthetic, s.simulation.inflation, s.data.lookback_years, s.data.min_history_years,
                       s.universe.categories)
         exp.optimization = describe_optimization(st["request"], st["risk"], st["estimates"], st["tax"],
                                                  st["portfolio"], st["simulation"], s.optimization.n_starts,

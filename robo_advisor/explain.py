@@ -92,7 +92,7 @@ def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port:
 def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext, port: Portfolio,
             sim: SimulationResult, proj: Projection, bench: BenchmarkResult,
             scenarios: list[ScenarioResult], dq: DataQualityReport, synthetic: bool,
-            inflation: float, lookback_years: int = 20,
+            inflation: float, lookback_years: int = 20, min_history_years: float = 20,
             categories: dict[str, list[str]] | None = None) -> Explanation:
     w = port.weights
     mu = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
@@ -209,7 +209,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     ]
     short = [t for t, q in dq.tickers.items() if not q.meets_min_history and t in req.tickers]
     if short:
-        limitations.append("Less than 20 years of history (maximum available used): " + ", ".join(
+        limitations.append(f"Less than {min_history_years:g} years of history (maximum available used): " + ", ".join(
             f"{t} ({dq.tickers[t].years_available:.1f}y)" for t in short) + ".")
     limitations += [f"Benchmark note: {n}" for n in bench.notes]
     disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS]   # not-advice: REPORT_DISCLAIMER

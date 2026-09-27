@@ -215,9 +215,10 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
 
     # the process, step by step
     window = f"{est.window_start:%b %Y} to {est.window_end:%b %Y}"
+    span = round((est.window_end - est.window_start).days / 365.25)
     steps = [
         ("Measure the ETFs",
-         f"From daily prices ({window}; up to 20 years, less for younger ETFs) we estimated each ETF's "
+         f"From daily prices ({window}; up to {span} years, less for younger ETFs) we estimated each ETF's "
          "average yearly return, how much it swings (volatility), and how the ETFs move together "
          "(correlation)." + (" Returns were reduced for the taxes you would pay." if after_tax else "")),
         ("Set the rules",
