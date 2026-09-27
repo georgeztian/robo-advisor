@@ -271,9 +271,10 @@ From top to bottom:
   target, and the scenarios.
 - **S&P 500 comparison:** the last 10 years with the same money invested.
 - **How it was made:** methodology, assumptions, limitations, and disclosures (including the
-  special-risk ETF notes). Expandable tables at the end show the parameter estimates, the data
-  validation, and the **tax rates applied to each selected ETF**: federal, state and combined
-  rates on its distributions, long-term and short-term gains (all 0 % for a pre-tax analysis).
+  special-risk ETF notes). Expandable tables at the end: **Parameter estimates (historical)**,
+  **Asset characteristics & data integrity** (each ETF's inception, history, fees and data
+  checks), and **Tax rates** (each selected ETF's federal, state and combined rates on its
+  distributions, long-term and short-term gains; all 0 % for a pre-tax analysis).
 - **Independent review:** every rule the reviewer checked, and the agent workflow trace.
 - **Disclaimer:** the outputs are informational only, not financial, investment, legal or
   trading advice.
