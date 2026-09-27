@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..explain import REPORT_DISCLAIMER, method_label, money
 from ..graph.engine import RunResult
+from ..tax import SCHEDULE_LABELS
 from . import charts
 
 _ENV = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -97,6 +98,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         reviews=reviews, superseded=superseded, review_ok=review_ok,
         review_summary=f"{passed}/{n} checks passed" + (
             f" (after {len(superseded)} remediated attempt(s))" if superseded else ""),
+        tax=st["tax"], tax_labels=SCHEDULE_LABELS, pct=lambda v: f"{v:.1%}",
         trace=result.trace, mermaid=mermaid, disclaimer=REPORT_DISCLAIMER,
         calculations=json.dumps(exp.calculations, indent=2, default=_json_default))
     return _ENV.get_template("report.html.j2").render(**ctx)
@@ -138,6 +140,11 @@ def audit_bundle(result: RunResult) -> dict:
                       "sharpe": port.sharpe, "initial_allocation": port.initial_allocation,
                       "monthly_allocation": port.monthly_allocation, "notes": port.notes,
                       "goal_search": {k: v for k, v in (port.goal_search or {}).items() if k != "frontier"}},
+        "tax_rates": {"enabled": req.client.taxes.enabled,
+                      "schedule": {k: {"federal": f, "state": s} for k, (f, s) in st["tax"].schedule.items()},
+                      "by_etf": [{"ticker": e["ticker"], "treatment": e["treatment"],
+                                  **{k: {"federal": e[k][0], "state": e[k][1]} for k in ("income", "lt", "st")}}
+                                 for e in st["tax"].by_etf]},
         "estimates": {"tickers": est.tickers, "mu": est.mu.tolist(), "sigma": est.sigma.tolist(),
                       "corr": est.corr.tolist(), "risk_free": est.risk_free},
         "reviews": [_review_json(r) for r in result.latest_reviews()],

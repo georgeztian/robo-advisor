@@ -42,37 +42,62 @@ class TaxRates:
         return TaxRates(False, z, z, 0.0, 0.0, 0.0, False, 0.0)
 
 
-def resolve_rates(tickers: list[str], tax_in: TaxInput, cfg: TaxCfg) -> TaxRates:
+SCHEDULE_LABELS = {"ordinary": "Ordinary income (interest, non-qualified dividends)",
+                   "qualified": "Qualified dividends", "ltcg": "Long-term capital gains",
+                   "stcg": "Short-term capital gains", "collectibles": "Long-term gains on collectibles (gold, silver)"}
+
+
+def tax_schedule(tax_in: TaxInput, cfg: TaxCfg) -> dict[str, tuple[float, float]]:
+    """(federal, state) rate for each kind of taxable income; all zero when taxes are off. The
+    state rate is one rate applied to every kind of income."""
     if not tax_in.enabled:
-        return TaxRates.disabled(len(tickers))
+        return {k: (0.0, 0.0) for k in SCHEDULE_LABELS}
 
     def pick(v, d):
         return d if v is None else v
 
     state = pick(tax_in.state_rate, cfg.state_rate)
-    ordinary = pick(tax_in.ordinary_rate, cfg.ordinary_rate) + state
-    qual = pick(tax_in.qualified_dividend_rate, cfg.qualified_dividend_rate) + state
-    ltcg = pick(tax_in.ltcg_rate, cfg.ltcg_rate) + state
-    stcg = pick(tax_in.stcg_rate, cfg.stcg_rate) + state
-    collect = min(cfg.collectibles_rate, ordinary - state) + state
-    inc, lt = [], []
-    for t in tickers:
-        info = CATALOG[t]
-        if info.income_type == "interest":
-            inc.append(ordinary)
-        elif info.income_type == "treasury":        # Treasury interest: federal-taxed, state-exempt
-            inc.append(ordinary - state)
-        elif info.income_type == "tax_exempt":      # municipal interest: federal-exempt, state-taxed
-            inc.append(state)
-        elif info.income_type == "none":
-            inc.append(0.0)
-        else:
-            q = info.qualified_fraction
-            inc.append(q * qual + (1 - q) * ordinary)
-        lt.append(collect if info.collectible else ltcg)
-    return TaxRates(True, np.array(inc), np.array(lt), stcg, ordinary,
-                    cfg.capital_loss_ordinary_offset,
-                    pick(tax_in.liquidate_at_horizon, cfg.liquidate_at_horizon), cfg.assumed_turnover)
+    ordinary = pick(tax_in.ordinary_rate, cfg.ordinary_rate)
+    return {"ordinary": (ordinary, state),
+            "qualified": (pick(tax_in.qualified_dividend_rate, cfg.qualified_dividend_rate), state),
+            "ltcg": (pick(tax_in.ltcg_rate, cfg.ltcg_rate), state),
+            "stcg": (pick(tax_in.stcg_rate, cfg.stcg_rate), state),
+            "collectibles": (min(cfg.collectibles_rate, ordinary), state)}   # capped at the ordinary rate
+
+
+def etf_tax_rates(ticker: str, sched: dict[str, tuple[float, float]]) -> dict:
+    """How one ETF's income is taxed: (federal, state) rates on its distributions, long-term
+    and short-term gains, and a description of the distribution treatment."""
+    info = CATALOG[ticker]
+    (o_f, o_s), (q_f, q_s) = sched["ordinary"], sched["qualified"]
+    q = info.qualified_fraction
+    kind = info.income_type
+    if kind == "interest":
+        treatment, income = "Interest, taxed as ordinary income", (o_f, o_s)
+    elif kind == "treasury":
+        treatment, income = "US Treasury interest: federal tax only (state-exempt)", (o_f, 0.0)
+    elif kind == "tax_exempt":
+        treatment, income = "Municipal-bond interest: state tax only (federal-exempt)", (0.0, o_s)
+    elif kind == "none":
+        treatment, income = "No distributions", (0.0, 0.0)
+    else:
+        label = {"qualified": "Dividends", "reit": "REIT distributions"}.get(kind, "Distributions")
+        treatment = f"{label}: {q:.0%} qualified, {1 - q:.0%} ordinary income"
+        income = (q * q_f + (1 - q) * o_f, q * q_s + (1 - q) * o_s)
+    return {"ticker": ticker, "treatment": treatment, "income": income,
+            "lt": sched["collectibles" if info.collectible else "ltcg"], "st": sched["stcg"],
+            "collectible": info.collectible}
+
+
+def resolve_rates(tickers: list[str], tax_in: TaxInput, cfg: TaxCfg) -> TaxRates:
+    if not tax_in.enabled:
+        return TaxRates.disabled(len(tickers))
+    sched = tax_schedule(tax_in, cfg)
+    by_etf = [etf_tax_rates(t, sched) for t in tickers]
+    return TaxRates(True, np.array([sum(e["income"]) for e in by_etf]), np.array([sum(e["lt"]) for e in by_etf]),
+                    sum(sched["stcg"]), sum(sched["ordinary"]), cfg.capital_loss_ordinary_offset,
+                    tax_in.liquidate_at_horizon if tax_in.liquidate_at_horizon is not None
+                    else cfg.liquidate_at_horizon, cfg.assumed_turnover)
 
 
 def after_tax_returns(est: Estimates, rates: TaxRates):
