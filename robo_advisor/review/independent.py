@@ -111,11 +111,12 @@ def _space(n: int, short: bool):
 
 
 def resolve(kind: str, mu_long: np.ndarray, mu_short: np.ndarray, cov: np.ndarray, short: bool,
-            max_pos: float, gross: float, vol_cap: float, rf: float = 0.0, min_return: float | None = None,
-            starts: int = 8, seed: int = 4242,
+            pos_min: np.ndarray, pos_max: np.ndarray, gross: float, vol_cap: float, rf: float = 0.0,
+            min_return: float | None = None, starts: int = 8, seed: int = 4242,
             groups: list[tuple[np.ndarray, float]] = ()) -> tuple[np.ndarray | None, float]:
     """kind: 'max_return' | 'min_vol' | 'max_sharpe'. Returns (w, objective value in natural units:
-    return for max_return, volatility for min_vol, Sharpe for max_sharpe). ``groups`` are
+    return for max_return, volatility for min_vol, Sharpe for max_sharpe). Per ETF
+    pos_min <= w_i (a positive minimum forbids shorting it) and |w_i| <= pos_max. ``groups`` are
     (0/1 membership vector, limit) pairs: sum of |w| over each group <= limit."""
     from scipy.optimize import minimize
 
@@ -141,18 +142,20 @@ def resolve(kind: str, mu_long: np.ndarray, mu_short: np.ndarray, cov: np.ndarra
     for member, lim in groups:
         g = np.concatenate([member, member]) if short else member
         cons.append({"type": "ineq", "fun": lambda x, g=g, lim=lim: lim - g @ x})
+    lo, hi = np.asarray(pos_min, float), np.asarray(pos_max, float)
+    bounds = list(zip(lo, hi)) + ([(0.0, 0.0 if lo[i] > 0 else hi[i]) for i in range(n)] if short else [])
     rng = np.random.default_rng(seed)
     best, best_val = None, np.inf
     for k in range(starts):
         w0 = np.full(n, 1 / n) if k == 0 else rng.dirichlet(np.ones(n))
-        w0 = np.minimum(w0, max_pos)
-        w0 = w0 / w0.sum()
+        w0 = np.clip(lo + (1 - lo.sum()) * w0, lo, hi)
         x0 = np.concatenate([w0, np.zeros(n)]) if short else w0
-        r = minimize(obj, x0, method="SLSQP", bounds=[(0, max_pos)] * d, constraints=cons,
+        r = minimize(obj, x0, method="SLSQP", bounds=bounds, constraints=cons,
                      options={"maxiter": 800, "ftol": 1e-12})
         x = r.x
         w = to_w(x)
-        ok = (abs(w.sum() - 1) < 1e-6 and np.abs(w).max() <= max_pos + 1e-6
+        ok = (abs(w.sum() - 1) < 1e-6 and bool(np.all(np.abs(w) <= hi + 1e-6))
+              and bool(np.all(w[lo > 0] >= lo[lo > 0] - 1e-6))
               and (kind == "min_vol" or vol(x) <= vol_cap + 1e-6)
               and (not short or np.abs(w).sum() <= gross + 1e-6)
               and (min_return is None or ret(x) >= min_return - 1e-7)

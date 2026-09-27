@@ -72,13 +72,13 @@ Execution waves (nodes within a wave run concurrently):
 | data_validation | §3 | Inception, 20-year coverage, gaps, split/distribution-consistent adjusted prices, expense ratios |
 | estimation | §6 | μ from monthly total returns; σ and Σ from daily returns (pairwise, PSD-repaired); VaR, CVaR, MDD, β, Sharpe, Sortino |
 | tax_adjust | §5 | After-tax return series (interest / qualified / REIT / collectibles), gain-realization drag |
-| constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; \|wᵢ\| ≤ max position; Σ\|wᵢ\| per category ≤ category limit (config defaults + client overrides); σ ≤ σ_max from the mapped profile |
+| constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; per-ETF lᵢ ≤ wᵢ and \|wᵢ\| ≤ uᵢ (client minimum / maximum, default 0 % / 50 %; a positive minimum forbids shorting); Σ\|wᵢ\| per category ≤ category limit (config defaults + client overrides); σ ≤ σ_max from the mapped profile |
 | optimizer | §7–§9 | Case A: min risk s.t. P(F_T ≥ F\*) ≥ p. Case B: max E[R] s.t. σ ≤ σ_max, or an alternative method |
 | simulation | §12 | 10,000-path Monte Carlo with contributions, rebalancing and taxes |
 | scenarios | §13 | Conservative / base / optimistic |
 | benchmark | §14 | 10-year S&P 500 backtest with identical W0, C, dates and return convention |
 | projection | §11 | Deterministic FV_T = W0(1+r)^T + C[((1+r)^T − 1)/r] |
-| explainer | §10, §16 | Narrative, per-ETF rationale, risk contributions, calculations, disclosures |
+| explainer | §10, §16 | Narrative, per-ETF rationale, risk contributions, calculations, disclosures, and the optimization problem written out (objective and every imposed constraint, in math and plain English, with the recommended portfolio's value for each) |
 | monitor | §18 | Separate graph: re-assesses a prior audit bundle and raises review triggers |
 
 ## Independent reviewer (`robo_advisor/review/`)
@@ -105,8 +105,8 @@ with evidence. The rule families:
 |---|---|
 | data | R-UNIV, R-DATA (no look-ahead, 20-year window, short-history flags, blocking validation findings, independent adjusted-price consistency, expense ratios) |
 | inputs | R-RISK (scores, min-mapping, band), R-EST (coverage, μ, σ, PSD Σ), R-TAX, R-CON |
-| portfolio | R-PORT: Σw = 1, long-only, max position, gross exposure, category limits (R-PORT-15), σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
-| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held leveraged / option-income / crypto ETFs) |
+| portfolio | R-PORT: Σw = 1, long-only, per-ETF minimum/maximum positions (R-PORT-03), gross exposure, category limits (R-PORT-15), σ ≤ σ_max, E[R] and σ reproduce, allocation reconciliation, case-correct objective, **independent re-solve (Case B)**, **goal minimality (Case A)** |
+| final | Cheap portfolio rules again, plus R-SIM (paths, percentiles, P(target) and P(loss) consistency, P ≥ p, independent-MC agreement), R-TAX-02, R-PROJ, R-SCN, R-BM (same W0/C/months, 10-year window, independent backtests of both sides), R-EXP (exact score phrases, "historical estimates" label, scenarios ≠ forecasts, tax disclaimer, synthetic watermark, special-risk disclosure for held leveraged / option-income / crypto ETFs, optimization problem written out with every imposed constraint (R-EXP-08)) |
 
 When remediation fixes a gate, only the **latest** report of each stage decides the verdict.
 Superseded attempts are kept as history in the report and in `audit.json`.
@@ -164,6 +164,10 @@ taxes, missing disclosures and a misreported probability.
   the minimum-volatility portfolio just far enough to satisfy it. The blend stays inside the
   convex feasible set, so every other constraint still holds.
 * **Shorts.** The variable split w = p − q keeps the gross-exposure constraint linear.
+* **Position limits.** Per-ETF bounds lᵢ ≤ wᵢ ≤ uᵢ. With shorts they become bounds on the split
+  variables: pᵢ ∈ [lᵢ, uᵢ] and qᵢ ∈ [0, uᵢ], or qᵢ = 0 when lᵢ > 0, so an ETF with a minimum
+  can't be shorted. The feasibility pre-check also stops the run when the minimums exceed 100 %
+  (or a category limit), or the maximums can't reach 100 %.
 * **Category limits.** Linear constraints (on p + q with shorts) are added to every method's
   formulation: the SLSQP constraints, rows of the CVaR linear program, and the long-only risk
   parity / max-diversification problems. A feasibility pre-check stops the run with an

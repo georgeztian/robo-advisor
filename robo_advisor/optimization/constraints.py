@@ -1,9 +1,9 @@
 """Portfolio constraints (spec §4) in a form usable by scipy SLSQP / linprog.
 
-Long-only:   0 <= w_i <= max_position,  sum w_i = 1
+Long-only:   min_i <= w_i <= max_i,  sum w_i = 1
 Short sales: w = p - q with p, q >= 0 (variable split), so gross exposure is linear:
-             sum (p_i + q_i) <= L,  p_i, q_i <= max_position (=> |w_i| <= max_position),
-             sum (p_i - q_i) = 1
+             sum (p_i + q_i) <= L,  p_i, q_i <= max_i (=> |w_i| <= max_i),
+             sum (p_i - q_i) = 1;  an ETF with min_i > 0 cannot be shorted (p_i >= min_i, q_i = 0)
 Categories:  sum over a category's ETFs of |w_i| <= category limit  (linear: p_i + q_i with shorts)
 Risk limit:  w' Sigma w <= sigma_max^2
 """
@@ -42,8 +42,20 @@ class Space:
     def from_w(self, w: np.ndarray) -> np.ndarray:
         return np.concatenate([np.clip(w, 0, None), np.clip(-w, 0, None)]) if self.short else w
 
+    @property
+    def lo(self) -> np.ndarray:
+        return self.rc.lower()
+
+    @property
+    def hi(self) -> np.ndarray:
+        return self.rc.upper()
+
     def bounds(self) -> list[tuple[float, float]]:
-        return [(0.0, self.rc.max_position)] * self.dim
+        lo, hi = self.lo, self.hi
+        b = list(zip(lo.tolist(), hi.tolist()))
+        if self.short:
+            b += [(0.0, 0.0 if lo[i] > 0 else hi[i]) for i in range(self.n)]
+        return b
 
     def cap_groups(self) -> list[tuple[str, float, np.ndarray]]:
         """(category, limit, 0/1 membership vector over the n ETFs) for each category limit."""
@@ -56,23 +68,27 @@ class Space:
         return out
 
     def check_feasible(self) -> None:
-        if self.n * self.rc.max_position < 1 - 1e-12:
+        lo, hi = self.lo, self.hi
+        if lo.sum() > 1 + 1e-9:
             raise InfeasibleError(
-                f"{self.n} ETF(s) with max position {self.rc.max_position:.0%} cannot sum to 100%; "
-                "select more ETFs or raise the position limit")
+                f"the minimum positions add up to {lo.sum():.0%}, more than 100%; lower some minimums")
         # largest long-only total the position and category limits allow
         capped = np.zeros(self.n, bool)
         room = 0.0
-        for _, lim, m in self.cap_groups():
-            room += min(lim, m.sum() * self.rc.max_position)
+        for cat, lim, m in self.cap_groups():
+            if m @ lo > lim + 1e-9:
+                raise InfeasibleError(
+                    f"the minimum positions in {cat} add up to {m @ lo:.0%}, above its {lim:.0%} category "
+                    "limit; lower those minimums or raise the category limit")
+            room += min(lim, m @ hi)
             capped |= m > 0
-        room += (~capped).sum() * self.rc.max_position
+        room += hi[~capped].sum()
         if room < 1 - 1e-9:
             limits = ", ".join(f"{c.category} {c.limit:.0%}" for c in self.rc.category_caps)
             raise InfeasibleError(
-                f"the selected ETFs can only reach {room:.0%} of the portfolio under the category limits "
-                f"({limits}) and the {self.rc.max_position:.0%} position limit; select ETFs from more "
-                "categories or raise the limits")
+                f"the selected ETFs can only reach {room:.0%} of the portfolio under the maximum position "
+                "limits" + (f" and the category limits ({limits})" if limits else "")
+                + "; select more ETFs or raise the limits")
 
     def linear_constraints(self) -> list[dict]:
         cons = [{"type": "eq", "fun": lambda x: self.to_w(x).sum() - 1.0,
@@ -92,27 +108,35 @@ class Space:
         return {"type": "ineq", "fun": lambda x: s2 - self.to_w(x) @ cov @ self.to_w(x),
                 "jac": lambda x: self.grad_to_x(-2 * cov @ self.to_w(x))}
 
+    def fill(self, d: np.ndarray) -> np.ndarray:
+        """Weights inside [min, max] that sum to 1: the minimums plus the remainder spread in
+        proportion to ``d``, water-filled into the maximums."""
+        lo, hi = self.lo, self.hi
+        w = lo + (1 - lo.sum()) * d / d.sum()
+        for _ in range(100):
+            over = w > hi + 1e-15
+            if not over.any():
+                break
+            excess = (w[over] - hi[over]).sum()
+            w[over] = hi[over]
+            free = w < hi - 1e-15
+            if not free.any():
+                break
+            share = d[free] if d[free].sum() > 0 else np.ones(free.sum())
+            w[free] += excess * share / share.sum()
+        return w
+
     def starts(self, k: int, rng: np.random.Generator) -> list[np.ndarray]:
-        n, m = self.n, self.rc.max_position
-        out = [np.full(n, 1.0 / n)]
-        for _ in range(k - 1):
-            w = rng.dirichlet(np.ones(n))
-            for _ in range(50):                     # water-fill into the position cap
-                over = w > m
-                if not over.any():
-                    break
-                excess = (w[over] - m).sum()
-                w[over] = m
-                free = ~over & (w < m)
-                w[free] += excess * w[free] / w[free].sum() if w[free].sum() > 0 else excess / free.sum()
-            out.append(w)
+        out = [self.fill(np.ones(self.n))]
+        out += [self.fill(rng.dirichlet(np.ones(self.n))) for _ in range(k - 1)]
         return [self.from_w(w) for w in out]
 
     def is_feasible(self, w: np.ndarray, tol: float = 1e-6, cov: np.ndarray | None = None,
                     sigma_max: float | None = None) -> bool:
-        if abs(w.sum() - 1) > tol or np.abs(w).max() > self.rc.max_position + tol:
+        lo, hi = self.lo, self.hi
+        if abs(w.sum() - 1) > tol or (np.abs(w) > hi + tol).any():
             return False
-        if not self.short and w.min() < -tol:
+        if (w < lo - tol)[lo > 0].any() or (not self.short and w.min() < -tol):
             return False
         if self.short and np.abs(w).sum() > self.rc.max_gross_leverage + tol:
             return False

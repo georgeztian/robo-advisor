@@ -64,6 +64,18 @@ ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
 details summary { cursor: pointer; color: var(--text-secondary); margin-top: 8px; }
 pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif; font-size: 16px; }
+.objective { font-size: 17px; padding: 10px 14px; border-left: 3px solid var(--series-1); background: var(--surface-0); border-radius: 6px; margin: 8px 0; }
+td.math { min-width: 220px; }
+ol.steps li { margin: 6px 0; }
+@media (max-width: 720px) {
+  table.cons, table.cons tbody, table.cons tr, table.cons td { display: block; width: 100%; }
+  table.cons tr.head { display: none; }
+  table.cons tr { border: 1px solid var(--border); border-radius: 8px; padding: 6px 4px; margin: 8px 0; }
+  table.cons td { border: 0; padding: 3px 8px; }
+  table.cons td.math { min-width: 0; }
+  table.cons td[data-label]::before { content: attr(data-label) ": "; color: var(--text-secondary); font-family: system-ui, sans-serif; font-size: 13px; }
+}
 @media (max-width: 720px) { .two { grid-template-columns: 1fr; } .tile.hero { grid-column: span 1; } }
 </style>
 </head>
@@ -135,6 +147,34 @@ pre { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); }
   <p class="sub">Since {{ prisk.common_start }} (common history of held ETFs): max drawdown {{ "%.1f%%"|format(prisk.max_drawdown*100) }},
     daily 95% VaR {{ "%.2f%%"|format(prisk.var_daily*100) }}, daily 95% CVaR {{ "%.2f%%"|format(prisk.cvar_daily*100) }},
     downside deviation {{ "%.1f%%"|format(prisk.downside_dev*100) }}.</p>
+</section>
+
+{% set o = exp.optimization %}
+<section>
+  <h2>How the optimizer chose this allocation</h2>
+  <h3>In plain English</h3>
+  <p>{{ o.summary }}</p>
+  <p><b>Goal.</b> {{ o.objective.plain }}</p>
+  <ul>{% for r in o.rules_plain %}<li>{{ r|safe }}</li>{% endfor %}</ul>
+  <h3>Step by step</h3>
+  <ol class="steps">{% for title, text in o.steps %}<li><b>{{ title }}.</b> {{ text }}</li>{% endfor %}</ol>
+  <h3>The optimization problem</h3>
+  <p class="sub">The optimizer chooses the weights <span class="math"><i>w</i> = (<i>w</i><sub>1</sub>, …, <i>w</i><sub><i>n</i></sub>)</span>, the share of your money in each ETF, to</p>
+  <div class="objective math">{{ o.objective.math|safe }}</div>
+  {% if o.objective.status %}<p class="sub">Result: {{ o.objective.status }}.</p>{% endif %}
+  <p class="sub">subject to every one of these constraints:</p>
+  <div class="scroll"><table class="cons">
+    <tr class="head"><th>Constraint</th><th>Mathematical form</th><th>What it means</th><th>Recommended portfolio</th></tr>
+    {% for c in o.constraints %}<tr><td><b>{{ c.name }}</b></td><td class="math">{{ c.math|safe }}</td><td>{{ c.plain|safe }}</td><td data-label="Recommended portfolio">{{ c.status|safe }}</td></tr>{% endfor %}
+  </table></div>
+  <h3>Position limits for each ETF</h3>
+  <div class="scroll"><table><tr><th>ETF</th><th class="num">Minimum <span class="math"><i>l</i><sub><i>i</i></sub></span></th><th class="num">Recommended <span class="math"><i>w</i><sub><i>i</i></sub></span></th><th class="num">Maximum <span class="math"><i>u</i><sub><i>i</i></sub></span></th></tr>
+  {% for r in o.positions %}<tr><td>{{ r.ticker }}</td><td class="num">{{ "%.0f%%"|format(r.min*100) }}</td><td class="num">{{ "%.1f%%"|format(r.weight*100) }}</td><td class="num">{{ "%.0f%%"|format(r.max*100) }}</td></tr>{% endfor %}
+  </table></div>
+  {% for n in o.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
+  <details><summary>What the symbols mean</summary><table>
+    {% for sym, meaning in o.symbols %}<tr><td class="math" style="min-width:0;white-space:nowrap">{{ sym|safe }}</td><td>{{ meaning|safe }}</td></tr>{% endfor %}
+  </table></details>
 </section>
 
 <section>

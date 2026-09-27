@@ -25,10 +25,10 @@ a report is produced.
 
 | Stage | What happens |
 |---|---|
-| Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 7 risk-tolerance questions, ETF choice by category, short-selling / position / tax preferences |
+| Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 8 risk-tolerance questions, ETF choice by category, short selling, a minimum and maximum position for each ETF, tax preferences |
 | Risk profile | Capacity and tolerance scores (0–100) are kept separate. **Mapped score = min(capacity, tolerance)**, which maps to a volatility limit (5 %–25 %, configurable) |
 | Market data | Up to 20 years of real daily prices from Yahoo Finance, validated for gaps, splits, distributions and look-ahead |
-| Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance (configurable) of reaching the target. **No target:** one of 7 methods; the default is the highest expected return within the risk limit. Always subject to the per-ETF and **per-category limits** |
+| Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance (configurable) of reaching the target. **No target:** one of 7 methods; the default is the highest expected return within the risk limit. Always subject to each ETF's **minimum and maximum position** and the **per-category limits**. The report writes out the optimization problem in mathematical form and in plain English |
 | Projection | 10,000-path Monte Carlo with contributions, rebalancing and optional taxes; conservative/base/optimistic scenarios; a deterministic future value |
 | Benchmark | The last 10 years against the S&P 500, with the same money invested |
 | Review | An independent reviewer runs about 60 checks at 4 checkpoints and stops the run on any blocking error |
@@ -59,12 +59,18 @@ Historical data is analyzed using up to 20 years of daily prices. ETFs younger t
 | Income ETFs | 25 % |
 | Commodity ETFs | 20 % |
 | Real Estate ETFs | 20 % |
-| All other categories | no limit (only the 50 % per-ETF limit) |
+| All other categories | no limit (only the per-ETF position limits) |
 
 A client can change any of these, in the questionnaire or in the profile file
 (`constraints.category_limits`). With short sales, the limit applies to the category's gross
 exposure. If the chosen ETFs can't add up to 100 % under the limits, the run stops and says
 so. The independent reviewer re-checks every limit.
+
+**Position limits** set the smallest and largest share each chosen ETF may hold. By default
+every ETF may hold between **0 %** (the optimizer may leave it out) and **50 %**. A client can
+change them for each ETF: a positive minimum makes sure the ETF is held (and, with short sales,
+that it is not shorted); the maximum also caps the size of a short position. The minimums
+must add up to 100 % or less, and the maximums to at least 100 %.
 
 ### How the portfolio is optimized
 
@@ -146,11 +152,12 @@ The app asks, in order:
    asks for the target amount and date (YYYY-MM-DD).
 2. The initial investment and monthly contribution in dollars, then, if there is no target,
    the investment horizon in years.
-3. **9 risk-capacity questions** and **7 risk-tolerance questions**. Type the number of the
+3. **9 risk-capacity questions** and **8 risk-tolerance questions**. Type the number of the
    answer. The investment-horizon question is answered automatically from the goal.
 4. **ETFs, category by category.** For each of the 9 categories, type the numbers of the ETFs
    to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
-5. Whether short sales are allowed and the maximum position size. It then shows the
+5. Whether short sales are allowed, then the **position limits**: keep 0 %–50 % for every ETF
+   (Enter), or type `n` to set a minimum and maximum for each chosen ETF. It then shows the
    **category limits** that apply to the chosen ETFs, which you can keep (Enter) or change.
 6. Whether to include taxes, and if so, the tax rates.
 7. **How the portfolio is optimized** (see "How the portfolio is optimized" above):
@@ -195,7 +202,7 @@ if it doesn't exist (`mkdir clients`). Either:
   "tolerance_answers": {
     "decline_reaction": "<code>", "temporary_losses": "<code>", "stable_vs_volatile": "<code>",
     "equity_comfort": "<code>", "experience": "<code>", "crash_behavior": "<code>",
-    "preserve_vs_growth": "<code>"
+    "preserve_vs_growth": "<code>", "risk_attitude": "<code>"
   },
   "universe": ["<category name or ticker>", "<category name or ticker>"],
   "constraints": {"allow_short": false},
@@ -205,8 +212,8 @@ if it doesn't exist (`mkdir clients`). Either:
 ```
 Numbers are written without quotes, `$` or commas (e.g. `"initial_investment": 150000`). For
 a client **without a target**, set `"has_target": false`, delete `target_amount` and
-`target_date`, and add `"horizon_years": <years>`. A placeholder left in place is reported
-as an `INPUT PROBLEM` naming the field.
+`target_date`, and add `"horizon_years": <years>`. A placeholder left in place, or a misspelled
+field name, is reported as an `INPUT PROBLEM` naming the field.
 
 **B2. Look up the allowed answers and ETF names:**
 ```
@@ -224,9 +231,9 @@ as an `INPUT PROBLEM` naming the field.
 | `goal.horizon_years` | Only if `has_target` is `false`, e.g. `15` |
 | `goal.initial_investment`, `goal.monthly_contribution` | Dollar amounts (numbers without `$` or commas) |
 | `capacity_answers` | One answer code for each of the 9 capacity questions. `./ra questionnaire` lists 10; leave out `investment_horizon`, which is derived from the goal |
-| `tolerance_answers` | One answer code for each of the 7 tolerance questions |
+| `tolerance_answers` | One answer code for each of the 8 tolerance questions |
 | `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
-| `constraints` | `allow_short` (`true`/`false`); optional `max_position` (e.g. `0.3`); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
+| `constraints` | `allow_short` (`true`/`false`); optional `min_position` and `max_position`, the limits for every ETF (defaults `0` and `0.5`); optional `position_limits` for individual ETFs, e.g. `{"BND": {"min": 0.1, "max": 0.3}, "IBIT": {"max": 0.02}}` (either key can be left out); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
 | `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`) |
 | `preferences` (optional) | **No target:** `optimization_method`, one of the 7 methods above (with `target_return` for method 5). **Target:** `target_probability` (e.g. `0.9`) and `goal_risk_metric` (`volatility` / `cvar`). **Both:** `rebalancing_type` (`calendar` / `threshold`), `rebalancing_frequency` (`monthly` / `quarterly` / `annual`), `rebalancing_threshold` (e.g. `0.05`) |
 
@@ -254,6 +261,10 @@ From top to bottom:
 - **Risk profile:** the capacity, tolerance and mapped scores, and the questionnaire scoring.
 - **Recommended portfolio:** each ETF's category, weight, initial and monthly dollars, and why
   it was chosen; the allocation by category; ETFs considered but not held.
+- **How the optimizer chose this allocation:** the problem in plain English, the steps the
+  optimizer took, the problem in mathematical form with every constraint (and where the
+  recommended portfolio sits against each one), each ETF's minimum and maximum, and what the
+  symbols mean.
 - **Financial projection:** the Monte Carlo range, the terminal-value distribution against the
   target, and the scenarios.
 - **S&P 500 comparison:** the last 10 years with the same money invested.
@@ -332,8 +343,8 @@ All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/
 - the ETF menu and its categories;
 - the questionnaire (questions, answer scores and weights);
 - the risk bands (score → volatility limit);
-- the target probability (80 %), the maximum position (50 %), the category limits and the
-  leverage limit;
+- the target probability (80 %), the default position limits (minimum 0 %, maximum 50 % per
+  ETF), the category limits and the leverage limit;
 - the number of Monte Carlo paths and the rebalancing rule;
 - tax rates and scenario shifts;
 - data-validation limits, monitoring triggers and reviewer tolerances.
@@ -383,7 +394,8 @@ robo_advisor/
   questionnaire.py         risk capacity / tolerance scoring and mapping
   data/                    market-data providers (synthetic, Yahoo, CSV, FRED) and validation
   estimation.py, tax.py    return / risk estimation and the estimated tax model
-  optimization/            constraints, 7 optimization methods, target-probability goal search
+  optimization/            constraints, 7 optimization methods, target-probability goal search,
+                           and the report's write-up of the optimization problem
   simulation.py, projection.py, benchmark.py, rebalancing.py, monitoring.py
   explain.py, report/      explanations and the HTML report
   graph/engine.py          workflow-graph engine (parallel waves, review gates, provenance)
@@ -404,7 +416,7 @@ Client files contain personal financial data, so keep them out of the repository
 |---|---|
 | `Python 3.10 or newer was not found` | Install Python (Step 1). On Windows, reinstall with "Add python.exe to PATH" ticked, then open a new terminal |
 | `permission denied: ./ra` (Mac/Linux) | Run `chmod +x ra setup.sh` once |
-| `INPUT PROBLEM: …` | The profile or answers are invalid, or the choice can't work. The message says why: a field, the `universe` (it lists the categories and ETFs), category limits the chosen ETFs can't satisfy, or no mix of the chosen ETFs meeting the client's risk limit. For that last one, add lower-risk ETFs, such as Bond or Risk-free Treasury ETFs |
+| `INPUT PROBLEM: …` | The profile or answers are invalid, or the choice can't work. The message says why: a field, the `universe` (it lists the categories and ETFs), position or category limits the chosen ETFs can't satisfy, or no mix of the chosen ETFs meeting the client's risk limit. For that last one, add lower-risk ETFs, such as Bond or Risk-free Treasury ETFs |
 | `MARKET DATA UNAVAILABLE` | Yahoo couldn't be reached. Check your internet, VPN or firewall, wait a minute (rate limit) and retry |
 | `WORKFLOW HALTED at review_…` | The independent reviewer found a real problem, usually in the market data (e.g. an ETF with too little history on the analysis date). The message names the rule, and the details are in `client_name_halted.json` |
 | The environment seems broken | `./setup.sh --fresh` (Windows: `.\setup.bat --fresh`) |

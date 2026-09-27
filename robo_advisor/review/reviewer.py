@@ -50,6 +50,17 @@ class Reviewer:
                 out[cat] = (limits[cat], held)
         return out
 
+    def _expected_positions(self, req) -> tuple[np.ndarray, np.ndarray]:
+        """Per-ETF [min, max] weights that must apply: the profile's per-ETF limits, else its
+        defaults, else the config's (in the order of req.tickers)."""
+        c, o = req.client.constraints, self.s.optimization
+        per = {k.strip().upper(): v for k, v in (c.position_limits or {}).items()}
+        d_lo = o.min_position if c.min_position is None else c.min_position
+        d_hi = o.max_position if c.max_position is None else c.max_position
+        lo = [d_lo if per.get(t) is None or per[t].min is None else per[t].min for t in req.tickers]
+        hi = [d_hi if per.get(t) is None or per[t].max is None else per[t].max for t in req.tickers]
+        return np.array(lo, float), np.array(hi, float)
+
     def _groups(self, req) -> list[tuple[np.ndarray, float]]:
         return [(np.array([1.0 if t in held else 0.0 for t in req.tickers]), lim)
                 for lim, held in self._expected_caps(req).values()]
@@ -176,15 +187,17 @@ class Reviewer:
               "taxes disabled: optimizer uses pre-tax returns")
         # constraints (spec §4)
         c = req.client.constraints
-        exp_pos = c.max_position if c.max_position is not None else self.s.optimization.max_position
+        exp_lo, exp_hi = self._expected_positions(req)
         exp_L = (c.max_gross_leverage if c.max_gross_leverage is not None else self.s.optimization.max_gross_leverage) if c.allow_short else 1.0
         caps = {cc.category: (cc.limit, sorted(cc.tickers)) for cc in rc.category_caps}
         exp_caps = {k: (v[0], sorted(v[1])) for k, v in self._expected_caps(req).items()}
         f(out, "R-CON-01", "§4/§8", "BLOCKER",
           rc.max_volatility == risk.max_volatility and rc.allow_short == c.allow_short
-          and rc.max_position == exp_pos and rc.max_gross_leverage == exp_L and caps == exp_caps,
+          and rc.tickers == req.tickers and np.array_equal(rc.lower(), exp_lo) and np.array_equal(rc.upper(), exp_hi)
+          and rc.max_gross_leverage == exp_L and caps == exp_caps,
           f"constraints: max vol {rc.max_volatility:.0%} (from mapped profile), short={rc.allow_short}, "
-          f"max position {rc.max_position:.0%}, gross <= {rc.max_gross_leverage:.2f}, category limits "
+          "position limits " + ", ".join(f"{t} {a:.0%}-{b:.0%}" for t, a, b in zip(req.tickers, exp_lo, exp_hi))
+          + f", gross <= {rc.max_gross_leverage:.2f}, category limits "
           + (", ".join(f"{k} {v[0]:.0%}" for k, v in exp_caps.items()) or "none"))
         return ReviewReport("inputs", out)
 
@@ -203,8 +216,12 @@ class Reviewer:
         else:
             f(out, "R-PORT-04", "§4", "BLOCKER", np.abs(w).sum() <= rc.max_gross_leverage + tol,
               f"gross exposure {np.abs(w).sum():.4f} <= L = {rc.max_gross_leverage:.2f}")
-        f(out, "R-PORT-03", "§4", "BLOCKER", np.abs(w).max() <= rc.max_position + tol,
-          f"largest position {np.abs(w).max():.2%} <= max position {rc.max_position:.0%}")
+        lo, hi = self._expected_positions(req)
+        bad = [f"{t} {x:.2%} not in [{a:.0%}, {b:.0%}]" for t, x, a, b in zip(req.tickers, w, lo, hi)
+               if abs(x) > b + tol or (a > 0 and x < a - tol)]
+        f(out, "R-PORT-03", "§4", "BLOCKER", not bad,
+          "every weight within its minimum/maximum position limits" if not bad
+          else "position limits violated: " + "; ".join(bad))
         exp_caps = self._expected_caps(req)
         if exp_caps:
             used = {cat: float(sum(abs(w[req.tickers.index(t)]) for t in held))
@@ -255,7 +272,8 @@ class Reviewer:
         req, est, tax, rc, port = st["request"], st["estimates"], st["tax"], st["constraints"], st["portfolio"]
         w = np.asarray(port.weights, float)
         mu_l = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
-        args = (mu_l, est.mu, est.cov, rc.allow_short, rc.max_position, rc.max_gross_leverage, rc.max_volatility)
+        args = (mu_l, est.mu, est.cov, rc.allow_short, *self._expected_positions(req), rc.max_gross_leverage,
+                rc.max_volatility)
         groups = self._groups(req)
         vol = float(np.sqrt(w @ est.cov @ w))
         if not req.has_target:
@@ -444,6 +462,19 @@ class Reviewer:
             f(out, "R-EXP-07", "§16", "BLOCKER",
               all(any(d.startswith(f"{RISK_NOTE_PREFIX} {t} ") for d in exp.disclosures) for t in special),
               f"special risks disclosed for held {', '.join(special)} (leveraged / option-income / crypto)")
+        # the optimization problem must be written out with every constraint the run imposed
+        opt = exp.optimization or {}
+        need = {"budget", "positions", "risk", "gross" if req.client.constraints.allow_short else "no_short"}
+        need |= {"categories"} if self._expected_caps(req) else set()
+        need |= {"target"} if req.has_target and not (port.goal_search or {}).get("infeasible") else set()
+        need |= {"target_return"} if port.method == "target_return" else set()
+        shown = {c.get("id") for c in opt.get("constraints", [])}
+        f(out, "R-EXP-08", "§9/§16", "BLOCKER",
+          bool(opt.get("objective", {}).get("math") and opt.get("objective", {}).get("plain")
+               and opt.get("summary") and opt.get("steps")) and need <= shown
+          and all(c.get("math") and c.get("plain") for c in opt.get("constraints", [])),
+          "optimization problem shown in mathematical form and plain English with every imposed constraint"
+          if need <= shown else f"optimization write-up is missing constraints: {sorted(need - shown)}")
         f(out, "R-EXP-06", "§16", "BLOCKER", bool(exp.methodology and exp.assumptions and exp.limitations
                                                   and exp.calculations),
           "methodology, assumptions, limitations and underlying calculations provided")

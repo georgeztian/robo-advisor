@@ -16,8 +16,15 @@ T = ["A", "B", "C", "D", "E"]
 SCEN = np.random.default_rng(0).multivariate_normal(MU / 12, COV / 12, 240)
 
 
+def make_rc(tickers, short, maxpos, L, cap, caps=(), minpos=0.0):
+    """Same [minpos, maxpos] limits for every ETF (a dict gives per-ETF values)."""
+    lo = minpos if isinstance(minpos, dict) else dict.fromkeys(tickers, minpos)
+    hi = maxpos if isinstance(maxpos, dict) else dict.fromkeys(tickers, maxpos)
+    return ResolvedConstraints(list(tickers), short, lo, hi, L, cap, list(caps))
+
+
 def rc(short=False, cap=0.12, maxpos=0.5, L=1.5):
-    return ResolvedConstraints(T, short, maxpos, L if short else 1.0, cap)
+    return make_rc(T, short, maxpos, L if short else 1.0, cap)
 
 
 @pytest.mark.parametrize("short", [False, True])
@@ -27,7 +34,7 @@ def test_every_method_respects_constraints(method, short):
     o = Optimizer(MU, COV, c, 0.02, SCEN)
     w = o.run(method, target=0.06).weights
     assert w.sum() == pytest.approx(1, abs=1e-6)
-    assert np.abs(w).max() <= c.max_position + 1e-6
+    assert np.abs(w).max() <= 0.5 + 1e-6
     assert np.sqrt(w @ COV @ w) <= c.max_volatility + 1e-6
     if short:
         assert np.abs(w).sum() <= c.max_gross_leverage + 1e-6
@@ -51,10 +58,12 @@ def test_shorting_increases_attainable_return():
 
 
 def test_infeasible_inputs_raise():
-    with pytest.raises(InfeasibleError, match="cannot sum"):
-        Optimizer(MU[:2], COV[:2, :2], ResolvedConstraints(T[:2], False, 0.4, 1.0, 0.2), 0.02)
+    with pytest.raises(InfeasibleError, match="can only reach 80%"):
+        Optimizer(MU[:2], COV[:2, :2], make_rc(T[:2], False, 0.4, 1.0, 0.2), 0.02)
     with pytest.raises(InfeasibleError, match="lowest-volatility"):
-        Optimizer(MU[:2], COV[:2, :2], ResolvedConstraints(T[:2], False, 1.0, 1.0, 0.05), 0.02).run("mean_variance")
+        Optimizer(MU[:2], COV[:2, :2], make_rc(T[:2], False, 1.0, 1.0, 0.05), 0.02).run("mean_variance")
+    with pytest.raises(InfeasibleError, match="minimum positions add up to 120%"):
+        Optimizer(MU[:2], COV[:2, :2], make_rc(T[:2], False, 0.9, 1.0, 0.2, minpos=0.6), 0.02)
 
 
 def _p(w, model, target, T_, seed=99, n=4000):
@@ -89,7 +98,7 @@ def test_goal_search_reports_unreachable_target():
 def cats_rc(short=False, limits=((("A", "B"), 0.30), (("E",), 0.10))):
     from robo_advisor.models import CategoryCap
     caps = [CategoryCap(f"cat{i}", lim, list(ts)) for i, (ts, lim) in enumerate(limits)]
-    return ResolvedConstraints(T, short, 0.5, 1.5 if short else 1.0, 0.12, caps)
+    return make_rc(T, short, 0.5, 1.5 if short else 1.0, 0.12, caps)
 
 
 @pytest.mark.parametrize("short", [False, True])
@@ -108,3 +117,24 @@ def test_category_limits_bind_and_infeasible_limits_are_explained():
     assert free[0] + free[1] > 0.30 and capped[0] + capped[1] == pytest.approx(0.30, abs=1e-5)
     with pytest.raises(InfeasibleError, match="category limits"):
         Optimizer(MU, COV, cats_rc(limits=((("A", "B", "C"), 0.2), (("D", "E"), 0.2))), 0.02)
+
+
+@pytest.mark.parametrize("short", [False, True])
+@pytest.mark.parametrize("method", [m for m in METHODS if m != "target_return"] + ["target_return"])
+def test_every_method_respects_per_etf_position_limits(method, short):
+    lo = {"A": 0.0, "B": 0.0, "C": 0.15, "D": 0.10, "E": 0.05}
+    hi = {"A": 0.20, "B": 0.25, "C": 0.40, "D": 0.50, "E": 0.30}
+    o = Optimizer(MU, COV, make_rc(T, short, hi, 1.5 if short else 1.0, 0.12, minpos=lo), 0.02, SCEN)
+    w = o.run(method, target=0.05).weights
+    lo_a, hi_a = np.array(list(lo.values())), np.array(list(hi.values()))
+    assert w.sum() == pytest.approx(1, abs=1e-6)
+    assert (np.abs(w) <= hi_a + 1e-6).all()
+    assert (w[lo_a > 0] >= lo_a[lo_a > 0] - 1e-6).all()   # a positive minimum also forbids shorting that ETF
+    assert short or w.min() >= -1e-9
+
+
+def test_minimums_above_a_category_limit_are_rejected():
+    from robo_advisor.models import CategoryCap
+    c = make_rc(T, False, 0.5, 1.0, 0.12, [CategoryCap("cat", 0.20, ["A", "B"])], minpos={**dict.fromkeys(T, 0.0), "A": 0.15, "B": 0.10})
+    with pytest.raises(InfeasibleError, match="minimum positions in cat add up to 25%"):
+        Optimizer(MU, COV, c, 0.02)

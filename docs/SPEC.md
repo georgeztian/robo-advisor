@@ -3,7 +3,9 @@
 > The original specification of this robo-advisor. The app implements it with a few deliberate
 > changes, documented in [ARCHITECTURE.md](ARCHITECTURE.md): the ETF menu is 25 ETFs in 9 categories
 > (replacing the list in §3), clients choose ETFs by category, per-category allocation limits apply,
-> and ETFs with less than 20 years of history use their maximum available history (§3).
+> each ETF has a client-set minimum and maximum position (default 0 % and 50 %; §4), the report
+> writes out the optimization problem in mathematical form and plain English, and ETFs with less
+> than 20 years of history use their maximum available history (§3).
 
 ## 1. Client Onboarding and Investment Questionnaire
 

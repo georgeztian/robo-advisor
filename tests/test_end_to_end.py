@@ -48,7 +48,8 @@ def test_unattainable_risk_limit_halts_with_explanation(settings, provider):
     c = load_client("client_target.json", universe=["QQQ", "TQQQ"],
                     tolerance_answers={k: v for k, v in load_client("client_target.json").tolerance_answers.items()}
                     | {"decline_reaction": "sell_at_10", "temporary_losses": "not_willing", "equity_comfort": "very_uncomfortable",
-                       "stable_vs_volatile": "stable_low", "preserve_vs_growth": "preserve", "crash_behavior": "sold_everything"})
+                       "stable_vs_volatile": "stable_low", "preserve_vs_growth": "preserve", "crash_behavior": "sold_everything",
+                       "risk_attitude": "avoid_losses"})
     with pytest.raises(Exception, match="lowest-volatility portfolio"):
         build_advisory_graph(settings, provider).run({"client": c})
 

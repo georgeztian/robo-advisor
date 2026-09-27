@@ -55,11 +55,11 @@ questionnaire:
   tolerance:           # spec §2B — psychological WILLINGNESS to bear losses
     - id: decline_reaction
       text: Your portfolio falls 10%, then 20%, then 40%. At what point would you sell?
-      weight: 0.20
+      weight: 0.15
       options: {sell_at_10: 5, sell_at_20: 30, sell_at_40: 60, hold_through_40: 85, buy_more: 100}
     - id: temporary_losses
       text: How willing are you to accept temporary losses to pursue higher long-term returns?
-      weight: 0.15
+      weight: 0.10
       options: {not_willing: 5, slightly: 30, moderately: 60, very: 85, extremely: 100}
     - id: stable_vs_volatile
       text: Which do you prefer?
@@ -67,7 +67,7 @@ questionnaire:
       options: {stable_low: 10, mostly_stable: 35, balanced: 60, mostly_growth: 85, volatile_high: 100}
     - id: equity_comfort
       text: How comfortable are you with an equity-heavy portfolio?
-      weight: 0.15
+      weight: 0.10
       options: {very_uncomfortable: 5, uncomfortable: 30, neutral: 55, comfortable: 80, very_comfortable: 100}
     - id: experience
       text: What is your previous investment experience?
@@ -76,11 +76,21 @@ questionnaire:
     - id: crash_behavior
       text: During past (or hypothetical) market crashes, did/would you remain invested?
       weight: 0.15
-      options: {sold_everything: 5, sold_some: 30, held: 70, bought_more: 100}
+      options: {sold_everything: 5, sold_some: 30, held_but_nervous: 60, held: 85, bought_more: 100}
     - id: preserve_vs_growth
       text: Preserve principal or pursue higher growth?
       weight: 0.10
       options: {preserve: 5, mostly_preserve: 30, balance: 60, mostly_growth: 85, growth: 100}
+    - id: risk_attitude
+      text: Which statement best describes your attitude toward investment risk?
+      weight: 0.15
+      options: {avoid_losses: 5, stable: 30, moderate: 60, substantial: 85, very_large: 100}
+      labels:
+        avoid_losses: I strongly prefer avoiding losses, even if it means accepting lower returns.
+        stable: I prefer relatively stable returns and am uncomfortable with significant fluctuations.
+        moderate: I accept moderate fluctuations in pursuit of higher long-term returns.
+        substantial: I am comfortable with substantial fluctuations for potentially higher returns.
+        very_large: I am willing to accept very large fluctuations and substantial losses for potentially higher returns.
 
 universe:                     # the ETFs a client may choose from, by category (25 ETFs, 9 categories)
   categories:
@@ -123,7 +133,8 @@ estimation:
 
 optimization:
   default_method: mean_variance   # mean_variance | min_volatility | max_sharpe | cvar | target_return | risk_parity | max_diversification
-  max_position: 0.50              # spec §4 (applies to |w_i|)
+  min_position: 0.0               # default minimum weight per selected ETF (a client can change it per ETF)
+  max_position: 0.50              # default maximum weight per selected ETF (spec §4; applies to |w_i|)
   max_gross_leverage: 1.5         # L when shorting is allowed (spec §4)
   category_limits:                # max share of the portfolio per ETF category (unlisted = no limit);
     Crypto ETFs: 0.05             #   a client profile can override any of them
