@@ -235,7 +235,7 @@ field name, is reported as an `INPUT PROBLEM` naming the field.
 | `tolerance_answers` | One answer code for each of the 8 tolerance questions |
 | `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
 | `constraints` | `allow_short` (`true`/`false`); optional `min_position` and `max_position`, the limits for every ETF (defaults `0` and `0.5`); optional `position_limits` for individual ETFs, e.g. `{"BND": {"min": 0.1, "max": 0.3}, "IBIT": {"max": 0.02}}` (either key can be left out); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
-| `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`) |
+| `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`); optional `liquidate_at_horizon` (`true` to include the tax on selling everything at the end; default `false`) |
 | `preferences` (optional) | **No target:** `optimization_method`, one of the 7 methods above (with `target_return` for method 5). **Target:** `target_probability` (e.g. `0.9`) and `goal_risk_metric` (`volatility` / `cvar`). **Both:** `rebalancing_type` (`calendar` / `threshold`), `rebalancing_frequency` (`monthly` / `quarterly` / `annual`), `rebalancing_threshold` (e.g. `0.05`) |
 
 **B4. Run it:**
@@ -327,7 +327,7 @@ Common options:
 | Option | Meaning |
 |---|---|
 | `--provider yahoo\|csv\|synthetic` | Data source. The default is `yahoo` (real prices); `synthetic` is simulated data for offline testing |
-| `--as-of YYYY-MM-DD\|today` | Analysis date for `run`, `data` and `monitor`; data after it is never used (default: today) |
+| `--as-of YYYY-MM-DD\|today` | Analysis date for `run`, `data` and `monitor`; data after it is never used (default: today; for `run`, an `as_of` date written in the profile is used if present) |
 | `--out FOLDER` | Where the report, audit and profile are written (default `out`) |
 | `--risk-free etf\|fred` | Risk-free rate from the BIL ETF (default) or the FRED 3-month T-bill rate |
 | `--config FILE.yaml` | Override settings (see Configuration) |

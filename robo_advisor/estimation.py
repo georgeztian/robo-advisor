@@ -116,9 +116,12 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
     income_yield = (monthly_income.mean() * 12).fillna(0.0).to_numpy()
 
     rf_t = data_cfg.risk_free_ticker
-    if risk_free_series is not None and len(risk_free_series.dropna()) > 20:
+    if risk_free_series is not None:
         rs = risk_free_series[(risk_free_series.index >= pd.Timestamp(window_start))
-                              & (risk_free_series.index <= pd.Timestamp(as_of))]
+                              & (risk_free_series.index <= pd.Timestamp(as_of))].dropna()
+    else:
+        rs = pd.Series(dtype=float)
+    if len(rs) > 20:                                   # Treasury yield series inside the window
         risk_free = float(rs.mean())
     elif rf_t in frames and len(frames[rf_t]) > 60:
         risk_free_source = "T-bill ETF proxy"
