@@ -270,7 +270,7 @@ From top to bottom:
 - **Financial projection:** the Monte Carlo range, the terminal-value distribution against the
   target, and the scenarios.
 - **S&P 500 comparison:** the last 10 years with the same money invested.
-- **How it was made:** methodology, assumptions, limitations, and disclosures (including the
+- **How this recommendation was made:** methodology, assumptions, limitations, and disclosures (including the
   special-risk ETF notes). Expandable tables at the end: **Parameter estimates (historical)**,
   **Asset characteristics & data integrity** (each ETF's inception, history, fees and data
   checks), and **Tax rates** (each selected ETF's federal, state and combined rates on its

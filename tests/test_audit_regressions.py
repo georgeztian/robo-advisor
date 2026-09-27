@@ -245,3 +245,10 @@ def test_interactive_probability_and_target_return_are_validated(settings, monke
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert _ask_optimizer(settings, True)["target_probability"] == 0.9
     assert _ask_optimizer(settings, False) == {"optimization_method": "target_return", "target_return": 0.07}
+
+
+def test_charts_handle_identical_values():
+    from robo_advisor.report import charts
+    for vals, target in (([100.0] * 50, None), ([0.0] * 50, None), ([5.0], 5.0)):
+        assert "<svg" in charts.histogram(vals, target)
+    assert "<svg" in charts.line_chart(["a", "b"], {"x": ([0.0, 0.0], "--series-1")})
