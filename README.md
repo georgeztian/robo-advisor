@@ -293,7 +293,8 @@ command. Each run overwrites that client's report and audit.
 3. It reports the performance since the last recommendation, and any **review triggers**:
    goal changed, contribution changed, target at risk, risk limit exceeded, market risk
    (volatility or correlations) shifted, risk profile changed, or ETFs still held were dropped
-   from the selection. If any fire, re-run Step 5 B4 with the updated profile.
+   from the selection or are no longer on the ETF menu. If any fire, re-run Step 5 B4 with the
+   updated profile.
 
    Without `--profile`, it re-checks the prior answers against today's data.
 
@@ -351,7 +352,8 @@ All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/
 - data-validation limits, monitoring triggers and reviewer tolerances.
 
 Don't edit that file. Put only the settings you want to change in your own file and pass
-`--config` with every command:
+`--config` with every command. A misspelled setting name is reported as an `INPUT PROBLEM`
+naming it, rather than silently ignored:
 ```yaml
 # my.yaml
 data: {provider: yahoo, risk_free_source: fred}

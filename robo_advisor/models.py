@@ -115,12 +115,10 @@ class Preferences(_Input):
 
 
 class ClientProfile(BaseModel):
-    """Spec §19 step 1: experience / financial information / horizon (free-form context)."""
+    """Spec §19 step 1. Only the name is used (report title, output file names); other keys that
+    older saved profiles carry (age, notes, ...) are ignored."""
 
     name: str = "Client"
-    age: int | None = None
-    investment_experience: str | None = None
-    notes: str | None = None
 
 
 class ClientInput(_Input):
@@ -198,9 +196,7 @@ class TickerQuality:
     last_obs: dt.date | None
     years_available: float
     meets_min_history: bool
-    existed_full_window: bool
     missing_days: int
-    missing_fraction: float
     max_gap_days: int
     adj_consistency_max_error: float
     n_splits: int
@@ -384,7 +380,7 @@ class Explanation:
     goal_text: str
     portfolio_text: str
     methodology: list[str]
-    etf_rationale: pd.DataFrame      # per ETF: weight, return, vol, corr, risk contribution, reason
+    etf_rationale: pd.DataFrame      # per ETF: weight, allocation, return, vol, risk contribution, reason
     assumptions: list[str]
     limitations: list[str]
     disclosures: list[str]

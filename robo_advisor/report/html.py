@@ -10,16 +10,12 @@ import numpy as np
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ..explain import REPORT_DISCLAIMER, method_label
+from ..explain import REPORT_DISCLAIMER, method_label, money
 from ..graph.engine import RunResult
 from . import charts
 
 _ENV = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
                    autoescape=select_autoescape(["html", "j2"]))
-
-
-def _money(v: float | None) -> str:
-    return "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"${v:,.0f}"
 
 
 def _bench_rows(m: pd.DataFrame) -> list[tuple[str, tuple[str, str]]]:
@@ -32,7 +28,7 @@ def _bench_rows(m: pd.DataFrame) -> list[tuple[str, tuple[str, str]]]:
         vals = []
         for c in m.columns:
             v = float(m.loc[k, c])
-            vals.append(f"{v:.1%}" if f == "pct" else f"{v:.2f}" if f == "num" else f"{int(v)}" if f == "int" else _money(v))
+            vals.append(f"{v:.1%}" if f == "pct" else f"{v:.2f}" if f == "num" else f"{int(v)}" if f == "int" else money(v))
         rows.append((k, tuple(vals)))
     return rows
 
@@ -55,7 +51,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
     category_rows.sort(key=lambda c: -abs(c["weight"]))
 
     alloc = charts.bar_chart_h([t for t, _ in held], [r["Weight"] for _, r in held], charts.pct,
-                               "ETF weights", notes=[f"{_money(r['Initial'])} initial, {_money(r['Monthly'])}/month"
+                               "ETF weights", notes=[f"{money(r['Initial'])} initial, {money(r['Monthly'])}/month"
                                                      for _, r in held])
     bands = [(b.max_score, b.profile) for b in (s.risk_bands if s else [])]
     risk_chart = charts.score_bars([("Risk capacity", risk.capacity_score), ("Risk tolerance", risk.tolerance_score),
@@ -64,7 +60,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
     labels = [str(p) for p in b.index]
     fan = charts.line_chart(
         labels, {"Median": (b["p50"].tolist(), "--seq-550"), "Total contributed": (b["contributed"].tolist(), "--text-muted")},
-        hline=(req.target, f"Target {_money(req.target)}") if req.has_target else None,
+        hline=(req.target, f"Target {money(req.target)}") if req.has_target else None,
         bands=[(b["p10"].tolist(), b["p90"].tolist(), "--seq-150", "10th-90th percentile"),
                (b["p25"].tolist(), b["p75"].tolist(), "--seq-250", "25th-75th percentile")],
         label="Monte Carlo projection", x_every=max(1, len(labels) // 8))
@@ -91,7 +87,7 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         scenarios=st["scenarios"], bench=bench, has_target=req.has_target, target=req.target,
         target_date=req.target_date.strftime("%B %Y") if req.target_date else None,
         target_probability=req.target_probability, months=req.months, W0=req.W0, C=req.C,
-        taxes=req.client.taxes.enabled, money=_money, method_label=method_label(port.method),
+        taxes=req.client.taxes.enabled, money=money, method_label=method_label(port.method),
         held_rows=held, unheld_rows=unheld, category_rows=category_rows, weight_total=float(port.weights.sum()),
         prisk=st["portfolio_risk"], bands=s.risk_bands if s else [],
         alloc_chart=alloc, risk_chart=risk_chart, fan_chart=fan, hist_chart=hist,

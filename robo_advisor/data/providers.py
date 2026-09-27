@@ -271,7 +271,7 @@ class CSVProvider:
             path = self.dir / f"{t}.csv"
             if not path.exists():
                 raise FileNotFoundError(f"missing price file {path}")
-            df = pd.read_csv(path, parse_dates=["date"]).set_index("date").sort_index()
+            df = pd.read_csv(path, parse_dates=["date"], encoding="utf-8-sig").set_index("date").sort_index()
             df.index = df.index.tz_localize(None) if df.index.tz is not None else df.index
             if "dividend" not in df:
                 df["dividend"] = 0.0

@@ -9,7 +9,8 @@ questionnaire/goal and fresh market data, and raises review triggers when:
   * market conditions materially change the portfolio's risk characteristics
     (portfolio volatility or asset correlations shift),
   * the client's questionnaire responses change the mapped risk profile,
-  * the updated ETF selection drops ETFs the portfolio still holds (they keep being evaluated).
+  * the updated ETF selection drops ETFs the portfolio still holds (they keep being evaluated),
+    or the portfolio holds ETFs that are no longer offered.
 
 Convention: in the updated client input, ``goal.initial_investment`` is the CURRENT
 portfolio value.
@@ -51,10 +52,14 @@ def assess(prior: dict, req: Request, risk: RiskAssessment, est: Estimates, rate
     trig: list[Trigger] = []
     pw = prior["portfolio"]["weights"]
     w = np.array([pw.get(t, 0.0) for t in est.tickers])
-    missing = list(req.held_not_selected) + [t for t, x in pw.items()
-                                             if abs(x) > 1e-9 and t not in est.tickers]
-    if missing:
-        trig.append(Trigger("UNIVERSE_CHANGED", f"previously held ETFs no longer selected: {missing}"))
+    retired = [t for t, x in pw.items() if abs(x) > 1e-9 and t not in est.tickers]
+    if req.held_not_selected:
+        trig.append(Trigger("UNIVERSE_CHANGED",
+                            f"previously held ETFs no longer selected: {list(req.held_not_selected)}"))
+    if retired:
+        trig.append(Trigger("UNIVERSE_CHANGED",
+                            f"previously held ETFs no longer offered, so not evaluated ({sum(abs(pw[t]) for t in retired):.0%} "
+                            f"of the portfolio; the figures below cover the rest): {retired}"))
     m: dict[str, Any] = {}
 
     # goal & contribution changes

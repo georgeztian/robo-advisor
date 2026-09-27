@@ -363,12 +363,19 @@ class ExplainerAgent:
         return {"explanation": exp, "portfolio_risk": prs}
 
 
-def _gate(name: str, fn, requires: tuple[str, ...], provides: str, desc: str,
+def _gate(name: str, fn, requires: tuple[str, ...], provides: str,
           remediate: tuple[str, ...] = (), retries: int = 0) -> Node:
     def run(st):
         return {provides: fn(st)}
-    return Node(name, run, requires, (provides,), kind="gate", description=desc,
+    return Node(name, run, requires, (provides,), kind="gate",
                 remediate=remediate, max_retries=retries)
+
+
+def add_input_gates(g: Graph, rv: Reviewer) -> None:
+    """The reviewer's data gate (before estimation) and inputs gate, shared with monitoring."""
+    g.add(_gate("review_data_gate", rv.review_data, ("request", "market", "data_quality"), "review_data"))
+    g.add(_gate("review_inputs_gate", rv.review_inputs,
+                ("request", "risk", "market", "data_quality", "estimates", "tax", "constraints"), "review_inputs"))
 
 
 def build_advisory_graph(settings: Settings, provider: DataProvider) -> Graph:
@@ -379,20 +386,13 @@ def build_advisory_graph(settings: Settings, provider: DataProvider) -> Graph:
                 TaxAgent, ConstraintAgent, OptimizerAgent, SimulationAgent, ScenarioAgent, BenchmarkAgent,
                 ProjectionAgent, ExplainerAgent):
         a = cls(sv)
-        g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides), tuple(getattr(a, "optional", ())),
-                   description=(cls.__doc__ or "").strip().splitlines()[0]))
-    g.add(_gate("review_data_gate", rv.review_data, ("request", "market", "data_quality"), "review_data",
-                "Reviewer: data validation, look-ahead, universe (before estimation)"))
-    g.add(_gate("review_inputs_gate", rv.review_inputs,
-                ("request", "risk", "market", "data_quality", "estimates", "tax", "constraints"),
-                "review_inputs", "Reviewer: data, estimates, risk mapping, constraints"))
+        g.add(Node(a.name, a, tuple(a.requires), tuple(a.provides), tuple(getattr(a, "optional", ()))))
+    add_input_gates(g, rv)
     g.add(_gate("review_portfolio_gate", rv.review_portfolio,
-                ("request", "estimates", "tax", "constraints", "portfolio"),
-                "review_portfolio", "Reviewer: constraint compliance, allocations, optimality",
+                ("request", "estimates", "tax", "constraints", "portfolio"), "review_portfolio",
                 remediate=("optimizer",), retries=2))
     g.add(_gate("final_review_gate", rv.review_final,
                 ("request", "risk", "estimates", "tax", "constraints", "portfolio", "simulation", "projection",
-                 "benchmark", "scenarios", "explanation", "market"),
-                "review_final", "Reviewer: simulation, projection, benchmark, disclosures"))
+                 "benchmark", "scenarios", "explanation", "market"), "review_final"))
     g.build()
     return g

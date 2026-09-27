@@ -40,10 +40,11 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
         info = CATALOG.get(t)
         issues: list[str] = []
         if df.empty:
-            q = TickerQuality(t, info.inception if info else None, None, None, 0.0, False, False,
-                              0, 1.0, 0, float("nan"), 0, 0, info.expense_ratio if info else None,
-                              ["no observations in window"])
-            out[t] = q
+            out[t] = TickerQuality(
+                ticker=t, inception=info.inception if info else None, first_obs=None, last_obs=None,
+                years_available=0.0, meets_min_history=False, missing_days=0, max_gap_days=0,
+                adj_consistency_max_error=float("nan"), n_splits=0, n_distributions=0,
+                expense_ratio=info.expense_ratio if info else None, issues=["no observations in window"])
             blocking.append(f"{t}: no observations in the estimation window")
             continue
         first, last = df.index[0].date(), df.index[-1].date()
@@ -94,7 +95,6 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
         years = (last - max(first, window_start)).days / 365.25
         meets = years >= cfg.min_history_years - 0.02
         inception = info.inception if info else first
-        existed = inception <= window_start
         if not meets:
             warnings.append(f"{t}: only {years:.1f} years of history (inception {inception}); "
                             f"using maximum available history")
@@ -109,8 +109,8 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
             warnings.append(f"{t}: implausible distribution yield {yld:.1%}")
         out[t] = TickerQuality(
             ticker=t, inception=inception, first_obs=first, last_obs=last,
-            years_available=round(years, 2), meets_min_history=meets, existed_full_window=existed,
-            missing_days=len(missing_idx), missing_fraction=missing_frac, max_gap_days=max_gap,
+            years_available=round(years, 2), meets_min_history=meets,
+            missing_days=len(missing_idx), max_gap_days=max_gap,
             adj_consistency_max_error=err, n_splits=n_splits, n_distributions=n_div,
             expense_ratio=info.expense_ratio if info else None, issues=issues)
     return DataQualityReport(window_start, as_of, out, blocking, warnings)

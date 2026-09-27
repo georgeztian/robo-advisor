@@ -125,13 +125,14 @@ def test_optimizer_question_lists_every_method(settings, monkeypatch, capsys):
     assert _ask_optimizer(settings, has_target=True) == {"target_probability": 0.9, "goal_risk_metric": "cvar"}
 
 
-def test_municipal_bond_income_is_free_of_federal_tax(settings):
+def test_municipal_and_treasury_income_taxes(settings):
     from robo_advisor.config import TaxCfg
     from robo_advisor.models import TaxInput
     from robo_advisor.tax import resolve_rates
     ti = TaxInput(enabled=True, ordinary_rate=0.30, state_rate=0.05)
-    rates = resolve_rates(["VTEB", "BND"], ti, TaxCfg())
-    assert rates.income.tolist() == pytest.approx([0.05, 0.35])      # VTEB: state tax only; BND: ordinary + state
+    rates = resolve_rates(["VTEB", "BND", "SCHR"], ti, TaxCfg())
+    # VTEB: state tax only; BND: federal + state; SCHR (Treasuries): federal only
+    assert rates.income.tolist() == pytest.approx([0.05, 0.35, 0.30])
     rv = Reviewer(settings)
     rv._tax_in = ti
-    assert rv._income_rate("VTEB") == pytest.approx(0.05)             # the reviewer's own derivation agrees
+    assert [rv._income_rate(t) for t in ("VTEB", "BND", "SCHR")] == pytest.approx([0.05, 0.35, 0.30])
