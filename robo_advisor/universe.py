@@ -7,7 +7,8 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Literal
 
-IncomeType = Literal["interest", "qualified", "mixed", "reit", "none"]
+IncomeType = Literal["interest", "tax_exempt", "qualified", "mixed", "reit", "none"]
+# tax_exempt: municipal-bond interest, free of federal income tax (state tax still applies)
 
 RISK_NOTE_PREFIX = "SPECIAL-RISK ETF:"
 
@@ -25,8 +26,6 @@ class ETFInfo:
     risk_note: str | None = None    # special risk that must be disclosed when the ETF is held
 
 
-_LEVERAGED = ("resets 3x leverage daily; over long horizons its compound return can differ sharply "
-              "from 3x the index (volatility decay), which a mean-variance optimizer does not penalize")
 _OPTION_INCOME = ("an option-income strategy: selling calls caps upside in strong markets, and its "
                   "high distribution yield is not total return (part may be return of capital)")
 _CRYPTO = ("holds spot bitcoin: extreme volatility and drawdowns, and a very short price history, so "
@@ -39,14 +38,17 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
     ETFInfo("VOO", "Vanguard S&P 500 ETF", "US Large-Cap Equity", D(2010, 9, 7), 0.0003, "qualified", 0.95),
     ETFInfo("VTI", "Vanguard Total Stock Market ETF", "US Total-Market Equity", D(2001, 5, 24), 0.0003, "qualified", 0.93),
     ETFInfo("QQQ", "Invesco QQQ Trust", "US Nasdaq-100 Equity", D(1999, 3, 10), 0.0020, "qualified", 0.95),
-    ETFInfo("TQQQ", "ProShares UltraPro QQQ (3x)", "Leveraged US Equity", D(2010, 2, 9), 0.0084, "mixed", 0.20,
-            risk_note=_LEVERAGED),
+    ETFInfo("VTV", "Vanguard Value ETF", "US Large-Cap Value Equity", D(2004, 1, 26), 0.0004, "qualified", 0.97),
+    ETFInfo("VB", "Vanguard Small-Cap ETF", "US Small-Cap Equity", D(2004, 1, 26), 0.0005, "qualified", 0.90),
     # Bonds
     ETFInfo("BND", "Vanguard Total Bond Market ETF", "US Investment-Grade Bonds", D(2007, 4, 3), 0.0003, "interest", 0.0),
     ETFInfo("TLT", "iShares 20+ Year Treasury Bond ETF", "Long-Term US Treasuries", D(2002, 7, 22), 0.0015, "interest", 0.0),
     ETFInfo("HYG", "iShares iBoxx $ High Yield Corporate Bond ETF", "US High-Yield Bonds", D(2007, 4, 4), 0.0049, "interest", 0.0),
+    ETFInfo("VTEB", "Vanguard Tax-Exempt Bond ETF", "US Municipal Bonds", D(2015, 8, 21), 0.0003, "tax_exempt", 0.0),
+    ETFInfo("SCHR", "Schwab Intermediate-Term U.S. Treasury ETF", "Intermediate-Term US Treasuries", D(2010, 8, 5), 0.0003, "interest", 0.0),
+    ETFInfo("SCHP", "Schwab U.S. TIPS ETF", "US Inflation-Protected Treasuries", D(2010, 8, 5), 0.0003, "interest", 0.0),
+    ETFInfo("BNDX", "Vanguard Total International Bond ETF (USD Hedged)", "International Bonds", D(2013, 5, 31), 0.0007, "interest", 0.0),
     # Risk-free short-term Treasuries
-    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "interest", 0.0),
     ETFInfo("SGOV", "iShares 0-3 Month Treasury Bond ETF", "T-Bills (Cash)", D(2020, 5, 26), 0.0009, "interest", 0.0),
     # Commodities
     ETFInfo("GLD", "SPDR Gold Shares", "Gold", D(2004, 11, 18), 0.0040, "none", 0.0, collectible=True),
@@ -67,12 +69,12 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
             risk_note=_OPTION_INCOME),
     ETFInfo("QQQI", "NEOS Nasdaq-100 High Income ETF", "Option-Income Equity", D(2024, 1, 29), 0.0068, "mixed", 0.40,
             risk_note=_OPTION_INCOME),
-    ETFInfo("JEPQ", "JPMorgan Nasdaq Equity Premium Income ETF", "Option-Income Equity", D(2022, 5, 3), 0.0035, "mixed", 0.15,
-            risk_note=_OPTION_INCOME),
     ETFInfo("JEPI", "JPMorgan Equity Premium Income ETF", "Option-Income Equity", D(2020, 5, 20), 0.0035, "mixed", 0.15,
             risk_note=_OPTION_INCOME),
     # Crypto
     ETFInfo("IBIT", "iShares Bitcoin Trust ETF", "Bitcoin", D(2024, 1, 11), 0.0025, "none", 0.0, risk_note=_CRYPTO),
+    # Not offered to clients: the T-bill series behind the default risk-free rate (data.risk_free_ticker)
+    ETFInfo("BIL", "SPDR Bloomberg 1-3 Month T-Bill ETF", "T-Bills (Cash)", D(2007, 5, 25), 0.00136, "interest", 0.0),
 ]}
 
 

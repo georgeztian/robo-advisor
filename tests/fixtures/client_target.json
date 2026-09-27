@@ -28,7 +28,7 @@
     "preserve_vs_growth": "balance",
     "risk_attitude": "moderate"
   },
-  "universe": ["VOO", "VXUS", "BND", "BIL", "GLD", "TLT", "VNQ", "SCHD", "QQQ"],
+  "universe": ["VOO", "VXUS", "BND", "SGOV", "GLD", "TLT", "VNQ", "SCHD", "QQQ"],
   "constraints": {"allow_short": false, "max_position": 0.5},
   "taxes": {"enabled": false},
   "preferences": {"rebalancing_type": "calendar", "rebalancing_frequency": "quarterly"}

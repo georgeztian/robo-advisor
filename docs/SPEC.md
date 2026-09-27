@@ -1,7 +1,7 @@
 # Fully Functional Robo-Advisor Workflow
 
 > The original specification of this robo-advisor. The app implements it with a few deliberate
-> changes, documented in [ARCHITECTURE.md](ARCHITECTURE.md): the ETF menu is 25 ETFs in 9 categories
+> changes, documented in [ARCHITECTURE.md](ARCHITECTURE.md): the ETF menu is configured by category
 > (replacing the list in §3), clients choose ETFs by category, per-category allocation limits apply,
 > each ETF has a client-set minimum and maximum position (default 0 % and 50 %; §4), the report
 > writes out the optimization problem in mathematical form and plain English, and ETFs with less
@@ -775,7 +775,7 @@ The complete application flow should therefore be:
 
 ### Step 4 — Investment Universe
 
-- Client selects ETFs from the 20-ETF list
+- Client selects ETFs from the ETF list
 
 ### Step 5 — Investment Constraints
 

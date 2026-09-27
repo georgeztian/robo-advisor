@@ -32,12 +32,15 @@ def test_no_target_taxed_client_workflow(no_target_run):
     port, tax = st["portfolio"], st["tax"]
     assert port.case == "no_target" and port.method == "mean_variance"
     assert tax.mu_after_tax is not None and port.expected_return < port.expected_return_pretax
-    assert port.volatility == pytest.approx(st["risk"].max_volatility, abs=1e-4)   # return maximized at the cap
+    assert port.volatility <= st["risk"].max_volatility + 1e-4
+    # the independent re-solve confirms no admissible portfolio earns more (whether or not the cap binds)
+    r09 = next(f for f in st["review_portfolio"].findings if f.rule_id == "R-PORT-09")
+    assert r09.passed and r09.severity == "BLOCKER"
     assert st["simulation"].prob_target is None and st["simulation"].taxes_paid_median > 0
 
 
 def test_parallel_and_sequential_runs_agree(settings, provider):
-    c = load_client("client_target.json", universe=["VOO", "BND", "BIL"])
+    c = load_client("client_target.json", universe=["VOO", "BND", "SGOV"])
     g = build_advisory_graph(settings, provider)
     a, b = g.run({"client": c}), g.run({"client": c}, parallel=False)
     assert (a.state["portfolio"].weights == b.state["portfolio"].weights).all()
@@ -45,7 +48,7 @@ def test_parallel_and_sequential_runs_agree(settings, provider):
 
 
 def test_unattainable_risk_limit_halts_with_explanation(settings, provider):
-    c = load_client("client_target.json", universe=["QQQ", "TQQQ"],
+    c = load_client("client_target.json", universe=["QQQ", "VB"],
                     tolerance_answers={k: v for k, v in load_client("client_target.json").tolerance_answers.items()}
                     | {"decline_reaction": "sell_at_10", "temporary_losses": "not_willing", "equity_comfort": "very_uncomfortable",
                        "stable_vs_volatile": "stable_low", "preserve_vs_growth": "preserve", "crash_behavior": "sold_everything",

@@ -101,6 +101,10 @@ _ETF_SPEC: dict[str, tuple[dict[str, float], float, float, int]] = {
     "BND": ({"AGG": 1.0}, 0.006, 0.030, 12),
     "TLT": ({"LTSY": 1.0}, 0.010, 0.032, 12),
     "BIL": ({"CASH": 1.0}, 0.001, 0.017, 12),
+    "VTEB": ({"AGG": 0.85}, 0.012, 0.028, 12),                   # municipal bonds
+    "SCHR": ({"AGG": 0.55, "LTSY": 0.30}, 0.005, 0.030, 12),     # intermediate Treasuries
+    "SCHP": ({"AGG": 0.70}, 0.020, 0.030, 12),                   # TIPS: rates plus inflation noise
+    "BNDX": ({"AGG": 0.80}, 0.012, 0.025, 12),                   # hedged international bonds
     "SGOV": ({"CASH": 1.0}, 0.001, 0.030, 12),
     "GLD": ({"GOLD": 1.0}, 0.010, 0.000, 0),
     "QQQ": ({"GROWTH": 1.0}, 0.010, 0.007, 4),
@@ -112,13 +116,14 @@ _ETF_SPEC: dict[str, tuple[dict[str, float], float, float, int]] = {
     "VYM": ({"VALUE": 1.0}, 0.025, 0.030, 4),
     "DGRO": ({"VALUE": 0.6, "US": 0.4}, 0.025, 0.023, 4),
     "SPY": ({"US": 1.0}, 0.004, 0.014, 4),
+    "VTV": ({"VALUE": 1.0}, 0.010, 0.024, 4),
+    "VB": ({"US": 0.75, "VALUE": 0.40}, 0.050, 0.015, 4),       # small caps: higher beta and own risk
     "HYG": ({"AGG": 0.55, "US": 0.30}, 0.030, 0.055, 12),        # credit: part rates, part equity risk
     "SLV": ({"GOLD": 1.25}, 0.170, 0.000, 0),                    # silver: gold beta plus its own noise
     "IEFA": ({"INTL": 1.0}, 0.010, 0.029, 4),
     # option-income: equity beta below 1 (calls sold), high monthly distributions
     "SPYI": ({"US": 0.80}, 0.020, 0.120, 12),
     "QQQI": ({"GROWTH": 0.80}, 0.025, 0.135, 12),
-    "JEPQ": ({"GROWTH": 0.75}, 0.025, 0.100, 12),
     "JEPI": ({"VALUE": 0.65}, 0.020, 0.080, 12),
     "IBIT": ({"GROWTH": 1.50}, 0.450, 0.000, 0),                 # bitcoin: very high idiosyncratic risk
 }
@@ -192,15 +197,8 @@ class SyntheticProvider:
         base = self._base_returns()
         info = CATALOG[ticker]
         rng = np.random.default_rng(self.seed * 1000 + sum(map(ord, ticker)))
-        if ticker == "TQQQ":   # 3x daily QQQ, minus fees and financing (cash) cost
-            qqq = np.expm1(self._total_log_returns("QQQ", rng))
-            cash = np.expm1(base["CASH"].to_numpy())
-            simple = 3 * qqq - 2 * cash - info.expense_ratio / 252
-            tr = np.log1p(np.clip(simple, -0.95, None))
-            yld, freq = 0.002, 4
-        else:
-            tr = self._total_log_returns(ticker, rng)
-            _, _, yld, freq = _ETF_SPEC[ticker]
+        tr = self._total_log_returns(ticker, rng)
+        _, _, yld, freq = _ETF_SPEC[ticker]
         idx = base.index
         live = idx >= pd.Timestamp(info.inception)
         idx, tr = idx[live], tr[live]
@@ -215,7 +213,7 @@ class SyntheticProvider:
         close = np.empty(len(idx))
         div = np.zeros(len(idx))
         split = np.ones(len(idx))
-        price = {"BIL": 91.0, "SGOV": 100.0, "TQQQ": 40.0}.get(ticker, 50.0 + len(ticker) * 10)
+        price = {"BIL": 91.0, "SGOV": 100.0}.get(ticker, 50.0 + len(ticker) * 10)
         close[0] = price
         for i in range(1, len(idx)):
             gross = tri[i] / tri[i - 1]

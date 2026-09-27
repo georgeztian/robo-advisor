@@ -92,16 +92,16 @@ questionnaire:
         substantial: I am comfortable with substantial fluctuations for potentially higher returns.
         very_large: I am willing to accept very large fluctuations and substantial losses for potentially higher returns.
 
-universe:                     # the ETFs a client may choose from, by category (25 ETFs, 9 categories)
+universe:                     # the ETFs a client may choose from, by category
   categories:
-    Equity ETFs: [SPY, VOO, VTI, QQQ, TQQQ]
-    Bond ETFs: [BND, TLT, HYG]
-    Risk-free Short-term Treasury ETFs: [BIL, SGOV]
+    Equity ETFs: [SPY, VOO, VTI, QQQ, VTV, VB]
+    Bond ETFs: [BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX]
+    Risk-free Short-term Treasury ETFs: [SGOV]
     Commodity ETFs: [GLD, SLV]
     International Equity ETFs: [VXUS, IEFA, VWO]
     Real Estate ETFs: [VNQ, SCHH]
     Dividend ETFs: [SCHD, VYM, DGRO]
-    Income ETFs: [SPYI, QQQI, JEPQ, JEPI]
+    Income ETFs: [SPYI, QQQI, JEPI]
     Crypto ETFs: [IBIT]
 
 data:
@@ -120,7 +120,7 @@ data:
   request_retries: 4          # Yahoo download attempts (exponential backoff)
   cache_refresh_hours: 12     # re-download a stale cache at most this often
   benchmark: VOO              # spec §14
-  risk_free_ticker: BIL       # T-bill ETF used as Treasury risk-free proxy (spec §6)
+  risk_free_ticker: BIL       # T-bill ETF used as Treasury risk-free proxy (spec §6); always fetched, not offered
   risk_free_fallback: 0.02
   risk_free_source: etf       # etf (T-bill ETF above) | fred (Treasury yield series; falls back to etf)
   fred_series: DTB3           # FRED 3-month Treasury bill secondary-market rate

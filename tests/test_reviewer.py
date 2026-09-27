@@ -30,7 +30,7 @@ def test_blocks_risk_limit_breach_and_short_positions(settings, target_run):
     w = np.zeros(len(p.tickers))
     w[p.tickers.index("QQQ")] = 0.5
     w[p.tickers.index("VNQ")] = 0.7
-    w[p.tickers.index("BIL")] = -0.2
+    w[p.tickers.index("SGOV")] = -0.2
     st["portfolio"] = dataclasses.replace(p, weights=w, volatility=float(np.sqrt(w @ est.cov @ w)))
     assert {"R-PORT-02", "R-PORT-03", "R-PORT-06"} <= failed(Reviewer(settings).review_portfolio(st))
 

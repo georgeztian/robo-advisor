@@ -1,4 +1,4 @@
-"""The ETF universe: exactly the configured 25 ETFs in 9 categories, chosen by category."""
+"""The ETF universe: exactly the configured ETFs by category, chosen by category."""
 import dataclasses
 
 import numpy as np
@@ -10,34 +10,40 @@ from robo_advisor.review import Reviewer
 from robo_advisor.universe import CATALOG, RISK_NOTE_PREFIX, UniverseError, category_of, resolve_universe
 
 EXPECTED = {
-    "Equity ETFs": ["SPY", "VOO", "VTI", "QQQ", "TQQQ"],
-    "Bond ETFs": ["BND", "TLT", "HYG"],
-    "Risk-free Short-term Treasury ETFs": ["BIL", "SGOV"],
+    "Equity ETFs": ["SPY", "VOO", "VTI", "QQQ", "VTV", "VB"],
+    "Bond ETFs": ["BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX"],
+    "Risk-free Short-term Treasury ETFs": ["SGOV"],
     "Commodity ETFs": ["GLD", "SLV"],
     "International Equity ETFs": ["VXUS", "IEFA", "VWO"],
     "Real Estate ETFs": ["VNQ", "SCHH"],
     "Dividend ETFs": ["SCHD", "VYM", "DGRO"],
-    "Income ETFs": ["SPYI", "QQQI", "JEPQ", "JEPI"],
+    "Income ETFs": ["SPYI", "QQQI", "JEPI"],
     "Crypto ETFs": ["IBIT"],
 }
 
 
 def test_configured_universe_is_the_agreed_list(settings):
     assert settings.universe.categories == EXPECTED
-    assert len(settings.universe.tickers) == 25 == len(set(settings.universe.tickers))
-    assert set(CATALOG) == set(settings.universe.tickers)          # catalog has no stale or missing ETFs
+    assert len(settings.universe.tickers) == len(set(settings.universe.tickers))
+    # the catalog is the menu plus the risk-free data series, which is fetched but not offered
+    assert set(CATALOG) == set(settings.universe.tickers) | {settings.data.risk_free_ticker}
+    assert settings.data.risk_free_ticker not in settings.universe.tickers
+    for gone in ("TQQQ", "BIL", "JEPQ"):
+        with pytest.raises(UniverseError):
+            resolve_universe([gone], settings.universe.categories)
 
 
 def test_catalog_facts_are_sane():
     for t, e in CATALOG.items():
         assert 0 < e.expense_ratio < 0.01 and 0 <= e.qualified_fraction <= 1
     assert CATALOG["GLD"].collectible and CATALOG["SLV"].collectible and not CATALOG["IBIT"].collectible
-    assert {t for t, e in CATALOG.items() if e.risk_note} == {"TQQQ", "SPYI", "QQQI", "JEPQ", "JEPI", "IBIT"}
+    assert {t for t, e in CATALOG.items() if e.risk_note} == {"SPYI", "QQQI", "JEPI", "IBIT"}
+    assert CATALOG["VTEB"].income_type == "tax_exempt"
 
 
 def test_resolve_by_category_and_ticker():
     got = resolve_universe(["bond etfs", "SPY", "IBIT", "HYG"], EXPECTED)
-    assert got == ["SPY", "BND", "TLT", "HYG", "IBIT"]                  # configured order, no duplicates
+    assert got == ["SPY", "BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX", "IBIT"]   # configured order, no duplicates
     assert category_of("HYG", EXPECTED) == "Bond ETFs"
     with pytest.raises(UniverseError, match="Crypto ETFs"):
         resolve_universe(None, EXPECTED)                                  # the client must choose
@@ -46,11 +52,11 @@ def test_resolve_by_category_and_ticker():
 
 
 def test_interactive_selection_by_category(settings, monkeypatch, capsys):
-    # Equity: 1,2 | Bond: all | Treasury: bad input then 2 | the rest skipped
-    answers = iter(["1,2", "all", "9", "2", "", "", "", "", "", ""])
+    # Equity: 1,2 | Bond: all | Treasury: bad input then 1 | the rest skipped
+    answers = iter(["1,2", "all", "9", "1", "", "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
-    assert choose_etfs(settings) == ["SPY", "VOO", "BND", "TLT", "HYG", "SGOV"]
-    assert "25 ETFs in 9 categories" in capsys.readouterr().out
+    assert choose_etfs(settings) == ["SPY", "VOO", "BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX", "SGOV"]
+    assert "Investment universe (ETFs by category)" in capsys.readouterr().out
 
 
 def test_invalid_universe_config_rejected():
@@ -84,7 +90,7 @@ def test_category_limits_from_config_and_client(settings, provider):
                     "Real Estate ETFs": 0.20, "Crypto ETFs": 0.02}  # config defaults + client overrides
     w = res.state["portfolio"].weight_map()
     assert w["IBIT"] <= 0.02 + 1e-6
-    assert sum(w[t] for t in ("SPY", "VOO", "VTI", "QQQ", "TQQQ")) <= 0.40 + 1e-6
+    assert sum(w[t] for t in ("SPY", "VOO", "VTI", "QQQ", "VTV", "VB")) <= 0.40 + 1e-6
     assert all(r.ok for r in res.latest_reviews())
 
 
@@ -118,3 +124,15 @@ def test_optimizer_question_lists_every_method(settings, monkeypatch, capsys):
     answers = iter(["90", "2"])                            # target client: probability, CVaR
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert _ask_optimizer(settings, has_target=True) == {"target_probability": 0.9, "goal_risk_metric": "cvar"}
+
+
+def test_municipal_bond_income_is_free_of_federal_tax(settings):
+    from robo_advisor.config import TaxCfg
+    from robo_advisor.models import TaxInput
+    from robo_advisor.tax import resolve_rates
+    ti = TaxInput(enabled=True, ordinary_rate=0.30, state_rate=0.05)
+    rates = resolve_rates(["VTEB", "BND"], ti, TaxCfg())
+    assert rates.income.tolist() == pytest.approx([0.05, 0.35])      # VTEB: state tax only; BND: ordinary + state
+    rv = Reviewer(settings)
+    rv._tax_in = ti
+    assert rv._income_rate("VTEB") == pytest.approx(0.05)             # the reviewer's own derivation agrees
