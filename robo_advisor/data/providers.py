@@ -175,11 +175,11 @@ class SyntheticProvider:
     Calibrated to each ETF's real inception date, typical long-run return/volatility,
     cross-asset correlations, distribution yield/frequency and three historical stress
     episodes (GFC, COVID crash, 2022 rate shock). An ETF without its own calibration in
-    ``_ETF_SPEC`` gets a generic proxy for its income type and asset class. Prices are generated once over a fixed
-    calendar (2000 through 2030) and then truncated to the request, so moving the as-of
-    date never changes earlier history (look-ahead-safe). Raw closes split 2:1 whenever
-    they exceed $500. A few missing observations are injected into SCHH / VWO so data
-    validation is exercised.
+    ``_ETF_SPEC`` gets a generic proxy for its income type and asset class. Prices are
+    generated once over a fixed calendar (2000 through 2030) and then truncated to the
+    request, so moving the as-of date never changes earlier history (look-ahead-safe). Raw
+    closes split 2:1 whenever they exceed $500. A few missing observations are injected into
+    SCHH / VWO so data validation is exercised.
 
     THIS IS NOT REAL MARKET DATA. Reports built on it are watermarked SYNTHETIC.
     """

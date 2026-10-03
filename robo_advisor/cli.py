@@ -338,6 +338,8 @@ def cmd_run(args) -> int:
         saved = out / f"{slug}_profile.json"
         saved.write_text(client.model_dump_json(indent=2, exclude={"as_of"}), encoding="utf-8")
         print(f"\nSaved your answers to {saved} (rerun with --profile {saved})")
+    print("\nBuilding the recommendation and the report. This can take a few minutes. "
+          "Thank you for your patience.", flush=True)
     try:
         res = graph.run({"client": client}, parallel=not args.sequential)
     except GraphHalted as e:
