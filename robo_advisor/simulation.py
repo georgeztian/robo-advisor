@@ -6,9 +6,10 @@ Each path, each month:
   2. apply them to the current holdings (portfolio weights drift);
   3. add the monthly contribution, allocated at the target weights;
   4. rebalance according to the selected rule;
-  5. when taxes are enabled: tax distributions monthly, realize gains/losses on rebalancing
-     sales (short/long-term by holding age, average-cost basis), net and carry forward
-     losses, settle tax at each year end (and optionally liquidate at the horizon);
+  5. when taxes are enabled: tax distributions monthly (return of capital untaxed, lowering
+     basis instead), realize gains/losses on rebalancing sales (short/long-term by holding age,
+     average-cost basis), net and carry forward losses, settle tax at each year end (and
+     optionally liquidate at the horizon);
   6. continue until the target date / horizon.
 """
 from __future__ import annotations
@@ -37,7 +38,7 @@ class MCModel:
     @staticmethod
     def from_moments(mu_annual: np.ndarray, cov_annual: np.ndarray, income_yield: np.ndarray,
                      mu_shift: float = 0.0, vol_multiplier: float = 1.0,
-                     distribution: str = "lognormal", history: np.ndarray | None = None) -> "MCModel":
+                     distribution: str = "lognormal", history: np.ndarray | None = None) -> MCModel:
         mu_m = (np.asarray(mu_annual) + mu_shift) / 12
         cov_m = np.asarray(cov_annual) * vol_multiplier**2 / 12
         g = 1 + mu_m
@@ -58,7 +59,7 @@ class MCModel:
 
     @staticmethod
     def from_estimates(est: Estimates, distribution: str = "lognormal", mu_shift: float = 0.0,
-                       vol_multiplier: float = 1.0) -> "MCModel":
+                       vol_multiplier: float = 1.0) -> MCModel:
         return MCModel.from_moments(est.mu, est.cov, est.income_yield, mu_shift, vol_multiplier,
                                     distribution, est.monthly_returns.to_numpy())
 
@@ -161,10 +162,12 @@ def simulate(w: np.ndarray, model: MCModel, W0: float, C: float, T: int, rebal: 
         prev_total = V.sum(axis=1)
         if taxed:
             # distributions on long positions are taxed and reinvested (adding basis); payments in
-            # lieu of dividends on short positions are a non-deductible cost already in the return
+            # lieu of dividends on short positions are a non-deductible cost already in the return.
+            # Return of capital is untaxed and lowers basis by what its reinvestment adds, so only
+            # the taxable part adds basis (tax.income already leaves the ROC part untaxed)
             income = np.clip(V, 0, None) * model.income_monthly
             inc_tax_acc += (income * tax.income).sum(axis=1)
-            buy(income, t)
+            buy(income * (1 - tax.roc), t)
         V = V * (1 + r)
         total = V.sum(axis=1)
         rp = np.where(prev_total > 0, total / np.where(prev_total > 0, prev_total, 1) - 1, 0)

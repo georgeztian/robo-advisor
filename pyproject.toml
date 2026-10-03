@@ -7,7 +7,7 @@ name = "robo-advisor"
 version = "0.1.0"
 description = "Goal-based robo-advisor: risk profiling, category-based ETF selection, portfolio optimization, Monte Carlo planning and S&P 500 comparison, orchestrated as an agent graph with an independent reviewer."
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",

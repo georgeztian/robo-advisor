@@ -29,7 +29,7 @@ def _pct(x: float, d: int = 1) -> str:
     return f"{x:.{d}%}"
 
 
-def _objective(port: Portfolio, req: Request, alpha: float) -> tuple[str, str, str]:
+def _objective(port: Portfolio, alpha: float) -> tuple[str, str, str]:
     """(math, plain English, short goal phrase) for the objective the optimizer used."""
     m = port.method
     tail = f"{int(round((1 - alpha) * 100))}%"
@@ -89,7 +89,7 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
     gs = port.goal_search or {}
     infeasible = bool(gs.get("infeasible"))
     after_tax = tax.mu_after_tax is not None
-    obj_math, obj_plain, obj_phrase = _objective(port, req, cvar_alpha)
+    obj_math, obj_plain, obj_phrase = _objective(port, cvar_alpha)
     if goal and infeasible:
         obj_math = f"maximize over {W}: &nbsp;{PROB}"
         obj_plain = "Make the chance of reaching your target as high as possible."
@@ -240,8 +240,9 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
              f"reaches {money(req.target)} by {req.target_date:%B %Y}."),
             ("Pick and double-check",
              (f"It picked the lowest-risk candidate reaching the target in at least {req.target_probability:.0%} "
-              f"of futures (with a small safety margin), fine-tuned it between neighbouring candidates, then "
-              f"re-checked it on {sim.n_paths:,} fresh simulated futures.")
+              "of futures (with a small safety margin)"
+              + (", fine-tuned it between neighbouring candidates," if port.method == "goal_min_volatility" else ",")
+              + f" then re-checked it on {sim.n_paths:,} fresh simulated futures.")
              if not infeasible else
              (f"No candidate reached the target in {req.target_probability:.0%} of futures, so it picked the "
               "candidate with the highest chance and worked out the monthly contribution that would be needed.")),

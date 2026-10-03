@@ -184,9 +184,6 @@ class MarketData:
     risk_free_source: str = "T-bill ETF proxy"
     notes: list[str] = field(default_factory=list)
 
-    def tickers(self) -> list[str]:
-        return list(self.frames)
-
 
 @dataclass
 class TickerQuality:
@@ -230,7 +227,6 @@ class Estimates:
     window_end: dt.date
     history_years: dict[str, float]
     monthly_income: pd.DataFrame | None = None   # monthly distribution yield per ETF
-    mu_after_tax: np.ndarray | None = None
     psd_repaired: bool = False
     risk_free_source: str = "T-bill ETF proxy"
 

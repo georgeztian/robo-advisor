@@ -1,5 +1,6 @@
 """The ETF universe: exactly the configured ETFs by category, chosen by category."""
 import dataclasses
+import datetime as dt
 
 import numpy as np
 
@@ -25,7 +26,7 @@ EXPECTED = {
 def test_configured_universe_is_the_agreed_list(settings):
     assert settings.universe.categories == EXPECTED
     assert len(settings.universe.tickers) == len(set(settings.universe.tickers))
-    assert set(CATALOG) == set(settings.universe.tickers)          # catalog has no stale or missing ETFs
+    assert set(settings.universe.tickers) <= set(CATALOG)           # every offered ETF has catalog facts
     assert settings.data.risk_free_ticker in settings.universe.tickers
     for gone in ("TQQQ", "JEPQ"):
         with pytest.raises(UniverseError):
@@ -34,10 +35,42 @@ def test_configured_universe_is_the_agreed_list(settings):
 
 def test_catalog_facts_are_sane():
     for t, e in CATALOG.items():
-        assert 0 < e.expense_ratio < 0.01 and 0 <= e.qualified_fraction <= 1
+        assert e.ticker == t and not e.problems(), (t, e.problems())
     assert CATALOG["GLD"].collectible and CATALOG["SLV"].collectible and not CATALOG["IBIT"].collectible
-    assert {t for t, e in CATALOG.items() if e.risk_note} == {"SPYI", "QQQI", "JEPI", "IBIT"}
+    assert {"SPYI", "QQQI", "JEPI", "IBIT"} <= {t for t, e in CATALOG.items() if e.risk_note}
     assert CATALOG["VTEB"].income_type == "tax_exempt"
+
+
+def _new_etf(**update):
+    from robo_advisor.universe import ETFInfo
+    fields = dict(ticker="XYZ", name="Test Added ETF", asset_class="US Mid-Cap Equity",
+                  inception=dt.date(2006, 3, 1), expense_ratio=0.0005, income_type="qualified",
+                  qualified_fraction=0.9)
+    return ETFInfo(**{**fields, **update})
+
+
+def test_adding_an_etf_works_end_to_end(monkeypatch):
+    """An ETF added to the catalog and offered through the config runs like any other, including
+    on synthetic data (it gets a generic calibration)."""
+    from conftest import FAST, load_client
+    from robo_advisor.agents.advisory import build_advisory_graph
+    from robo_advisor.config import load_settings
+    from robo_advisor.data.providers import SyntheticProvider
+    monkeypatch.setitem(CATALOG, "XYZ", _new_etf())
+    s = load_settings(overrides={**FAST, "universe": {"categories": {"Equity ETFs": ["VOO", "XYZ"]}}})
+    frame = SyntheticProvider().fetch(["XYZ"], dt.date(2010, 1, 1), dt.date(2026, 9, 23))["XYZ"]
+    assert len(frame) > 4000 and frame["dividend"].gt(0).any()
+    c = load_client("client_no_target.json", universe=["Equity ETFs", "Bond ETFs"])
+    res = build_advisory_graph(s, SyntheticProvider()).run({"client": c})
+    assert "XYZ" in res.state["portfolio"].tickers
+    assert all(r.ok for r in res.latest_reviews())
+
+
+def test_invalid_catalog_entry_rejected(monkeypatch):
+    from robo_advisor.config import load_settings
+    monkeypatch.setitem(CATALOG, "XYZ", _new_etf(expense_ratio=0.68, income_type="qualifed"))
+    with pytest.raises(ValueError, match="expense_ratio 0.68.*income_type 'qualifed'"):
+        load_settings(overrides={"universe": {"categories": {"Equity ETFs": ["VOO", "XYZ"]}}})
 
 
 def test_resolve_by_category_and_ticker():
@@ -134,5 +167,4 @@ def test_municipal_and_treasury_income_taxes(settings):
     # VTEB: state tax only; BND: federal + state; SCHR (Treasuries): federal only
     assert rates.income.tolist() == pytest.approx([0.05, 0.35, 0.30])
     rv = Reviewer(settings)
-    rv._tax_in = ti
-    assert [rv._income_rate(t) for t in ("VTEB", "BND", "SCHR")] == pytest.approx([0.05, 0.35, 0.30])
+    assert [rv._income_rate(t, ti) for t in ("VTEB", "BND", "SCHR")] == pytest.approx([0.05, 0.35, 0.30])

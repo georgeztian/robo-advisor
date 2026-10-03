@@ -233,6 +233,27 @@ def test_monitor_reports_holdings_that_are_no_longer_offered(settings, provider,
     assert not any("no longer selected" in m for m in msgs)
 
 
+def test_monitor_reports_holdings_removed_from_the_menu(settings, provider, target_run):
+    """An ETF still in the catalog but taken off the menu is reported, not a reason to halt."""
+    import json
+    from conftest import FAST, load_client
+    from robo_advisor.agents.monitor import build_monitoring_graph
+    from robo_advisor.config import load_settings
+    from robo_advisor.report.html import audit_bundle
+    from robo_advisor.universe import category_of
+    prior = json.loads(json.dumps(audit_bundle(target_run)))
+    w = prior["portfolio"]["weights"]
+    gone = max(w, key=w.get)
+    cat = category_of(gone, settings.universe.categories)
+    s = load_settings(overrides={**FAST, "universe": {"categories": {
+        cat: [t for t in settings.universe.categories[cat] if t != gone]}}})
+    c = load_client("client_target.json")
+    c = c.model_copy(update={"universe": [t for t in c.universe if t != gone]})
+    rep = build_monitoring_graph(s, provider).run({"client": c, "prior": prior}).state["monitoring"]
+    msgs = [t.message for t in rep.triggers if t.code == "UNIVERSE_CHANGED"]
+    assert any("no longer offered" in m and gone in m for m in msgs)
+
+
 def test_settings_reject_unknown_keys():
     from robo_advisor.config import load_settings
     with pytest.raises(ValueError, match="optimization.max_postion"):

@@ -17,17 +17,16 @@ import re
 import sys
 from pathlib import Path
 
-from .agents.advisory import build_advisory_graph
+from .agents.advisory import build_advisory_graph, last_business_day, years_before
 from .agents.monitor import build_monitoring_graph
 from .config import Settings, load_settings
-from .data.providers import DataUnavailableError, make_provider
+from .data.providers import DataUnavailableError, fetch_treasury_rate, make_provider
 from .data.validation import validate
 from .graph.engine import GraphHalted
 from .models import ClientInput
 from .optimization.methods import goal_risk_metrics, method_descriptions
-from .universe import CATALOG
 from .report.html import audit_bundle, render
-
+from .universe import CATALOG
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -399,13 +398,8 @@ def cmd_monitor(args) -> int:
 def cmd_data(args) -> int:
     """Download (or read from cache) and validate market data without running an analysis."""
     s = _settings(args)
-    as_of = _as_of(args.as_of) or dt.date.today()
-    while as_of.weekday() >= 5:
-        as_of -= dt.timedelta(days=1)
-    try:
-        start = as_of.replace(year=as_of.year - s.data.lookback_years)
-    except ValueError:
-        start = as_of.replace(year=as_of.year - s.data.lookback_years, day=28)
+    as_of = last_business_day(_as_of(args.as_of) or dt.date.today())
+    start = years_before(as_of, s.data.lookback_years)
     tickers = [t.upper() for t in args.tickers] if args.tickers else list(s.universe.tickers)
     unknown = [t for t in tickers if t not in CATALOG]
     if unknown:
@@ -428,7 +422,6 @@ def cmd_data(args) -> int:
     for b in dq.blocking:
         print(f"  BLOCKER: {b}")
     if s.data.risk_free_source == "fred" and not prov.synthetic:
-        from .data.providers import fetch_treasury_rate
         try:
             rf = fetch_treasury_rate(s.data.fred_series, start, as_of, s.data.cache_dir)
             print(f"\nRisk-free: FRED {s.data.fred_series}, {len(rf)} observations, mean {rf.mean():.2%}")
@@ -439,7 +432,7 @@ def cmd_data(args) -> int:
 
 
 def cmd_graph(args) -> int:
-    s = load_settings(getattr(args, "config", None))
+    s = load_settings(args.config)
     g = (build_monitoring_graph if args.monitoring else build_advisory_graph)(s, make_provider("synthetic"))
     print(g.to_mermaid())
     print("\n%% execution waves: " + " | ".join(", ".join(w) for w in g.waves()))
@@ -448,18 +441,19 @@ def cmd_graph(args) -> int:
 
 def cmd_etfs(args) -> int:
     """Print the ETF menu (categories) for filling in a profile's "universe"."""
-    s = load_settings(getattr(args, "config", None))
+    s = load_settings(args.config)
     print("The ETF menu by category. In a profile, list tickers and/or whole category names under \"universe\".")
     for cat, tickers in s.universe.categories.items():
         print(f"\n{cat}")
         for i, t in enumerate(tickers, 1):
             print(_etf_line(i, t))
-    print("\n[special risk] = option-income or crypto ETF; its risks are disclosed in the report.")
+    print("\n[special risk] = an ETF with special risks (e.g. option-income or crypto); they are disclosed "
+          "in the report.")
     return 0
 
 
 def cmd_questionnaire(args) -> int:
-    s = load_settings(getattr(args, "config", None))
+    s = load_settings(args.config)
     for block in ("capacity", "tolerance"):
         print(f"\n# {block}")
         for q in getattr(s.questionnaire, block):

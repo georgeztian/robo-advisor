@@ -48,5 +48,21 @@ def test_weights_must_sum_to_one():
             {"id": "x", "text": "x", "weight": 0.5, "options": {"a": 10}}]}})
 
 
+@pytest.mark.parametrize("overrides, match", [
+    ({"questionnaire": {"tolerance": [{"id": "x", "text": "x", "weight": 0.5, "options": {"a": 10}},
+                                      {"id": "x", "text": "y", "weight": 0.5, "options": {"a": 10}}]}},
+     "not unique"),
+    ({"questionnaire": {"capacity": [{"id": "h", "text": "h", "weight": 1.0, "derive_from_goal": True,
+                                      "options": {"short": 10, "long": 90}}]}}, "must include"),
+    ({"questionnaire": {"tolerance": [{"id": "h", "text": "h", "weight": 1.0, "derive_from_goal": True,
+                                       "options": {"under_3y": 10}}]}}, "only supported for capacity"),
+    ({"tax": {"ordinary_rate": 24}}, "ordinary_rate"),
+    ({"data": {"benchmark": "XYZ"}}, "benchmark XYZ has no entry"),
+])
+def test_inconsistent_settings_are_rejected(overrides, match):
+    with pytest.raises(ValueError, match=match):
+        load_settings(overrides=overrides)
+
+
 def test_horizon_buckets():
     assert [horizon_option(m) for m in (12, 36, 84, 150, 300)] == ["under_3y", "3_5y", "5_10y", "10_20y", "over_20y"]

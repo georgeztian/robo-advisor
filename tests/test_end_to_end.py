@@ -94,14 +94,16 @@ def test_cli_never_relies_on_platform_default_encoding(tmp_path):
                    "optimization: {goal: {search_paths: 300, frontier_points: 6}}\nreview: {mc_paths: 800}\n",
                    encoding="utf-8")
     strict = [sys.executable, "-X", "warn_default_encoding", "-W", "error::EncodingWarning", "-m", "robo_advisor"]
+    # console output uses the console's encoding (cp1252 on Windows), so read it leniently
+    console = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace"}
     out = tmp_path / "out"
     run = subprocess.run(strict + ["run", "--provider", "synthetic", "--profile", str(FIXTURES / "client_target.json"), "--out", str(out),
-                                   "--config", str(cfg)], capture_output=True, text=True, encoding="utf-8")
+                                   "--config", str(cfg)], **console)
     assert run.returncode == 0, run.stderr[-2000:]
     html = (out / "alex_target_report.html").read_text(encoding="utf-8")
     assert "⚠" in html                                   # the non-ASCII banner that crashed on Windows
     mon = subprocess.run(strict + ["monitor", "--provider", "synthetic", "--prior", str(out / "alex_target_audit.json"), "--config", str(cfg)],
-                         capture_output=True, text=True, encoding="utf-8")
+                         **console)
     assert mon.returncode in (0, 1), mon.stderr[-2000:]      # 1 = review triggers found
 
 

@@ -168,7 +168,7 @@ def estimate(frames: dict[str, pd.DataFrame], tickers: list[str], as_of: dt.date
                      psd_repaired=repaired, risk_free_source=risk_free_source)
 
 
-def portfolio_risk_stats(w: np.ndarray, est: Estimates, conf: float = 0.95) -> dict:
+def portfolio_risk_stats(w: np.ndarray, est: Estimates, conf: float, trading_days: int) -> dict:
     """Historical downside statistics for fixed weights over the common live period."""
     common = est.daily_returns.dropna()
     out = {"common_start": common.index[0].date() if len(common) else None,
@@ -181,4 +181,4 @@ def portfolio_risk_stats(w: np.ndarray, est: Estimates, conf: float = 0.95) -> d
     v, cv = var_cvar(rp, conf)
     dn = np.clip(rp, None, 0)
     return out | {"max_drawdown": max_drawdown(idx), "var_daily": v, "cvar_daily": cv,
-                  "downside_dev": float(np.sqrt((dn**2).mean()) * np.sqrt(252))}
+                  "downside_dev": float(np.sqrt((dn**2).mean()) * np.sqrt(trading_days))}

@@ -1,10 +1,11 @@
 """S&P 500 benchmark comparison (spec §14).
 
-The recommended portfolio and the S&P 500 (VOO total return) are run through the SAME
-monthly backtest: same start/end month-ends (most recent 10 years), same initial investment,
-same monthly contributions, same return convention (monthly total returns, pre-tax), with the
-portfolio rebalanced per the selected rule. If a held ETF has a shorter history, the
-comparison starts at the first month all held ETFs traded, and this is flagged.
+The recommended portfolio and the S&P 500 (the benchmark ETF's total return, VOO by default)
+are run through the SAME monthly backtest: same start/end month-ends (most recent 10 years),
+same initial investment, same monthly contributions, same return convention (monthly total
+returns, pre-tax), with the portfolio rebalanced per the selected rule. If a held ETF has a
+shorter history, the comparison starts at the first month all held ETFs traded, and this is
+flagged.
 """
 from __future__ import annotations
 
@@ -62,9 +63,10 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
     notes = []
     period_years = len(monthly) / 12
     if period_years < years - 1 / 12:
-        late = [t for t in held if frames[t].index[0] > start_req]
-        notes.append(f"Comparison covers {period_years:.1f} years (not {years}) because "
-                     f"{', '.join(late)} started trading later.")
+        late = [t for t in need if frames[t].index[0] > start_req]
+        notes.append(f"Comparison covers {period_years:.1f} years (not {years})"
+                     + (f" because {', '.join(late)} started trading later." if late
+                        else " because of gaps in the price history."))
     rf_m = None
     if rf_ticker in frames:
         r = month_end_prices(frames[rf_ticker][["adj_close"]])["adj_close"].pct_change()
@@ -82,7 +84,7 @@ def compare(frames: dict[str, pd.DataFrame], tickers: list[str], w: np.ndarray, 
     one = np.array([1.0])
     bench_idx = backtest(monthly[[benchmark]], one, 1.0, 0.0, rebal)[0]
     bench_contrib = backtest(monthly[[benchmark]], one, W0, C, rebal)[1]
-    idx = [start_p] + list(monthly.index)
+    idx = [start_p, *monthly.index]
     total_contrib = W0 + C * len(monthly)
 
     def metrics(index: np.ndarray, contrib: np.ndarray) -> dict:

@@ -9,21 +9,22 @@ from ..data.providers import DataProvider
 from ..graph.engine import Graph, Node
 from ..monitoring import assess
 from ..review import Reviewer
-from ..universe import CATALOG
 from .advisory import (ConstraintAgent, DataValidationAgent, EstimationAgent, IntakeAgent, MarketDataAgent,
                        RiskProfilerAgent, Services, TaxAgent, add_input_gates)
 
 
 class MonitorIntakeAgent(IntakeAgent):
-    """Intake for monitoring: the prior portfolio's holdings are always evaluated, even when the
-    updated profile no longer selects them (they are flagged as a universe change)."""
+    """Intake for monitoring: the prior portfolio's holdings that are still on the ETF menu are
+    always evaluated, even when the updated profile no longer selects them (flagged as a universe
+    change). Holdings no longer on the menu are reported by the monitor, not evaluated."""
 
     requires = ("client", "prior")
 
     def __call__(self, st):
         req = super().__call__(st)["request"]
+        offered = set(self.sv.settings.universe.tickers)
         held = [t for t, x in st["prior"]["portfolio"]["weights"].items() if abs(x) > 1e-9]
-        dropped = [t for t in held if t not in req.tickers and t in CATALOG]
+        dropped = [t for t in held if t not in req.tickers and t in offered]
         if dropped:
             req = dataclasses.replace(req, tickers=req.tickers + dropped, held_not_selected=dropped,
                                       data_tickers=sorted(set(req.data_tickers) | set(dropped)))

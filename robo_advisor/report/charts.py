@@ -101,7 +101,7 @@ def line_chart(labels: Sequence[str], series: dict[str, tuple[Sequence[float], s
         y = f.y(hline[0])
         body.append(f'<line class="refline" x1="{PAD_L}" x2="{W - PAD_R}" y1="{y:.1f}" y2="{y:.1f}"/>'
                     f'<text class="reflabel" x="{PAD_L + 6}" y="{y - 6:.1f}">{escape(hline[1])}</text>')
-    for name, (s, color) in series.items():
+    for s, color in series.values():
         body.append(f'<path d="{_path(xs, [f.y(v) for v in s])}" fill="none" stroke="var({color})" '
                     f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>')
     # hover targets: one column per x with every series value

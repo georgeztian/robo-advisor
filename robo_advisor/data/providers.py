@@ -12,6 +12,7 @@ Providers must never return observations after the requested end date (no look-a
 from __future__ import annotations
 
 import datetime as dt
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -129,6 +130,38 @@ _ETF_SPEC: dict[str, tuple[dict[str, float], float, float, int]] = {
 }
 
 
+def _etf_spec(ticker: str) -> tuple[dict[str, float], float, float, int]:
+    """The ETF's calibration above, or, for an ETF added to the catalog without one, a generic
+    proxy chosen from its income type and asset class."""
+    if ticker in _ETF_SPEC:
+        return _ETF_SPEC[ticker]
+    info = CATALOG[ticker]
+    ac = info.asset_class.lower()
+    if info.collectible:
+        return {"GOLD": 1.0}, 0.050, 0.000, 0
+    if info.income_type == "treasury":
+        if "bill" in ac or "cash" in ac:
+            return {"CASH": 1.0}, 0.001, 0.030, 12
+        return {"AGG": 0.55, "LTSY": 0.30}, 0.008, 0.030, 12
+    if info.income_type in ("interest", "tax_exempt"):
+        return {"AGG": 0.90}, 0.012, 0.035, 12
+    if info.income_type == "reit":
+        return {"REIT": 1.0}, 0.015, 0.035, 4
+    if info.income_type == "none":                               # non-distributing, e.g. a commodity
+        return {"US": 0.30}, 0.150, 0.000, 0
+    if "emerging" in ac:
+        return {"EM": 1.0}, 0.015, 0.030, 4
+    if "international" in ac or "developed" in ac:
+        return {"INTL": 1.0}, 0.012, 0.030, 4
+    if "option" in ac:
+        return {"US": 0.80}, 0.020, 0.100, 12
+    if "nasdaq" in ac or "growth" in ac or "tech" in ac:
+        return {"GROWTH": 1.0}, 0.015, 0.007, 4
+    if "value" in ac or "dividend" in ac:
+        return {"VALUE": 1.0}, 0.020, 0.030, 4
+    return {"US": 1.0}, 0.015, 0.015, 4
+
+
 def _near_psd_corr(c: np.ndarray) -> np.ndarray:
     vals, vecs = np.linalg.eigh((c + c.T) / 2)
     c2 = vecs @ np.diag(np.clip(vals, 1e-6, None)) @ vecs.T
@@ -141,7 +174,8 @@ class SyntheticProvider:
 
     Calibrated to each ETF's real inception date, typical long-run return/volatility,
     cross-asset correlations, distribution yield/frequency and three historical stress
-    episodes (GFC, COVID crash, 2022 rate shock). Prices are generated once over a fixed
+    episodes (GFC, COVID crash, 2022 rate shock). An ETF without its own calibration in
+    ``_ETF_SPEC`` gets a generic proxy for its income type and asset class. Prices are generated once over a fixed
     calendar (2000 through 2030) and then truncated to the request, so moving the as-of
     date never changes earlier history (look-ahead-safe). Raw closes split 2:1 whenever
     they exceed $500. A few missing observations are injected into SCHH / VWO so data
@@ -198,7 +232,7 @@ class SyntheticProvider:
         info = CATALOG[ticker]
         rng = np.random.default_rng(self.seed * 1000 + sum(map(ord, ticker)))
         tr = self._total_log_returns(ticker, rng)
-        _, _, yld, freq = _ETF_SPEC[ticker]
+        _, _, yld, freq = _etf_spec(ticker)
         idx = base.index
         live = idx >= pd.Timestamp(info.inception)
         idx, tr = idx[live], tr[live]
@@ -243,7 +277,7 @@ class SyntheticProvider:
 
     def _total_log_returns(self, ticker: str, rng: np.random.Generator) -> np.ndarray:
         base = self._base_returns()
-        mix, idio, _, _ = _ETF_SPEC[ticker]
+        mix, idio, _, _ = _etf_spec(ticker)
         info = CATALOG[ticker]
         simple = sum(w * np.expm1(base[a].to_numpy()) for a, w in mix.items())
         simple = simple + rng.standard_normal(len(base)) * idio / np.sqrt(252) - info.expense_ratio / 252
@@ -362,8 +396,6 @@ class YahooProvider:
         return yf
 
     def _download(self, t: str) -> pd.DataFrame:
-        import time
-
         yf = self._yf()
         last: Exception | None = None
         attempt = 0
@@ -395,9 +427,7 @@ class YahooProvider:
                                    f"{type(last).__name__}: {last}")
 
     def _cache_fresh(self, path: Path, df: pd.DataFrame, end: dt.date) -> bool:
-        import time
-
-        last = df.index[-1].date() if len(df) else dt.date.min
+        last =df.index[-1].date() if len(df) else dt.date.min
         wanted = min(end, dt.date.today())
         behind = len(trading_calendar(last + dt.timedelta(days=1), wanted)) if wanted > last else 0
         if behind <= 1:                            # today's bar may not exist yet
