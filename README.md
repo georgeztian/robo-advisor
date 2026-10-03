@@ -377,11 +377,31 @@ optimization:
 |---|---|---|
 | Which ETFs are offered, and their categories | `universe.categories` in your `my.yaml` | List the tickers under each category. A list you give replaces that category's default list, so repeat the tickers you want to keep. A new category name adds a category; give it a limit under `optimization.category_limits` if it needs one. A ticker may be in only one category. A default category can't be removed from `my.yaml`. Every ticker needs a catalog entry (next row) |
 | An ETF's facts: name, asset class, inception date, expense ratio | The `CATALOG` list in [`robo_advisor/universe.py`](robo_advisor/universe.py) | Edit its `ETFInfo(...)` line. The inception date is written `D(YYYY, M, D)`; `expense_ratio` is a decimal (`0.0003` = 0.03 %). To add an ETF, copy a similar line, change every field (including the distribution fields in the next row), then add the ticker to a category above. Optional `risk_note="…"` adds a special-risk disclosure to any report that holds the ETF |
-| An ETF's distributions: how they are taxed | The same `ETFInfo(...)` line | `income_type`: `qualified` (stock dividends), `mixed` (part qualified), `reit`, `interest` (taxable bonds), `treasury` (federal tax only), `tax_exempt` (municipal bonds: state tax only) or `none` (no distributions). `roc_fraction` (optional, 0–1): the share that is return of capital, from the fund's tax-year reports. It is not taxed when paid; it lowers the cost basis, so it is taxed as a capital gain when the shares are sold. `qualified_fraction`: the share of the rest taxed at the qualified-dividend rate (0–1), from the fund's latest tax-year "QDI %"; the remainder is taxed as ordinary income. `collectible=True` for physical gold or silver (gains taxed at the collectibles rate) |
-| Distribution amounts | Nothing for real data | Real dividends come with the market data (Yahoo, or the `dividend` column of your CSV files). For synthetic data only, an ETF's yield and payment frequency can be set in `_ETF_SPEC` in [`robo_advisor/data/providers.py`](robo_advisor/data/providers.py); an ETF not listed there gets a typical value for its type |
+| Distributions: their types and percentages | The same `ETFInfo(...)` line | Set the kind of income with `income_type` and the percentages with `roc_fraction` and `qualified_fraction`, as described in [Distribution types](#distribution-types) below. Take the percentages from the fund's latest tax-year reports. `collectible=True` marks physical gold or silver, whose gains are taxed at the collectibles rate |
 | Default tax rates | `tax:` in your `my.yaml` (defaults in `default.yaml`) | Set `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate` and `state_rate` as decimals. They apply only to clients with `"taxes": {"enabled": true}`, and a rate in the client's `taxes` block overrides the default. Route A saves all five rates in the profile, so later changes here don't affect those profiles. `collectibles_rate` (gold and silver ETFs) can be set only here, and is capped at the client's ordinary rate |
 | Risk capacity and risk tolerance questions | `questionnaire.capacity` and `questionnaire.tolerance` in your `my.yaml` | Each question has an `id`, `text`, `weight`, `options` (answer code: score 0–100) and optional `labels` (display text per code). Weights in each list must add up to 1.0. The list you give replaces the whole default list, so copy the full list from `default.yaml` and edit it. Keep the answer codes of the question marked `derive_from_goal` (`under_3y` … `over_20y`), which are filled in from the goal. Put quotes around the codes `"yes"` and `"no"` |
 | How the risk score maps to a volatility limit | `risk_bands` in your `my.yaml` | Give the full list with `max_score`, `profile` and `max_volatility`, in increasing `max_score` order; the last band must reach 100 |
+
+#### Distribution types
+
+Each part of a distribution is taxed by its type:
+
+| Type | Taxed as | How to set it |
+|---|---|---|
+| Return of capital | Not taxed when paid. It lowers the cost basis, so it is taxed as a capital gain when the shares are sold | `roc_fraction`: its share of the whole distribution (0–1, default 0) |
+| Qualified dividends | Qualified-dividend rate | `qualified_fraction`: their share of the part that is not return of capital (0–1; the fund's "QDI %") |
+| Ordinary (non-qualified) dividends | Ordinary income rate | The rest of the part that is not return of capital |
+| Interest from taxable bonds | Ordinary income rate | `income_type="interest"` |
+| US Treasury interest | Federal tax only | `income_type="treasury"` |
+| Municipal-bond interest | State tax only | `income_type="tax_exempt"` |
+
+For dividend-paying ETFs, set `income_type` to `qualified`, `mixed` or `reit`. All three are
+taxed by the percentages above and differ only in the report's label. Use `none` for an ETF that
+pays no distributions.
+
+Example: SPYI has `roc_fraction=0.93` and `qualified_fraction=0.40`. Of each distribution, 93 %
+is return of capital, 2.8 % (40 % of the remaining 7 %) is qualified dividends, and 4.2 % is
+ordinary dividends.
 
 Notes:
 
@@ -389,6 +409,8 @@ Notes:
   `./ra etfs --config my.yaml` and `./ra questionnaire --config my.yaml` show the result.
 - Changes to `universe.py` apply to every run directly. It is part of the app's code, so
   `git pull` (Step 9) may stop if it conflicts with your edits: keep a copy of your lines first.
+- Distribution amounts are not configured. They come with the market data (Yahoo, or the
+  `dividend` column of your CSV files).
 - If you add, remove or rename a question `id` or an answer code, update the client profiles to
   match. Otherwise the run stops with an `INPUT PROBLEM` listing what is missing or invalid.
 - The settings and the catalog entries of the offered ETFs are checked on every run. A ticker
