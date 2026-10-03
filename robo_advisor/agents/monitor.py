@@ -27,7 +27,7 @@ class MonitorIntakeAgent(IntakeAgent):
         dropped = [t for t in held if t not in req.tickers and t in offered]
         if dropped:
             req = dataclasses.replace(req, tickers=req.tickers + dropped, held_not_selected=dropped,
-                                      data_tickers=sorted(set(req.data_tickers) | set(dropped)))
+                                      data_tickers=list(dict.fromkeys([*req.tickers, *dropped, *req.data_tickers])))
         return {"request": req}
 
 

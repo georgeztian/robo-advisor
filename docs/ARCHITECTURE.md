@@ -124,11 +124,11 @@ taxes, missing disclosures and a misreported probability.
 
   | Category | ETFs |
   |---|---|
-  | Equity | SPY, VOO, VTI, QQQ, VTV, VB |
-  | Bond | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
+  | Equity | SPY, VOO, VTI, QQQ, VUG, VTV, VB, VO, VV |
+  | Bond | BND, TLT, SCHR, VTEB, HYG, SCHP, BNDX |
   | Risk-free Short-term Treasury | BIL, SGOV |
   | Commodity | GLD, SLV |
-  | International Equity | VXUS, IEFA, VWO |
+  | International Equity | VXUS, IEFA, VWO, VEA |
   | Real Estate | VNQ, SCHH |
   | Dividend | SCHD, VYM, DGRO |
   | Income | SPYI, QQQI, JEPI |

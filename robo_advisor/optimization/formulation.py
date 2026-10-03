@@ -78,8 +78,7 @@ def _objective(port: Portfolio, alpha: float) -> tuple[str, str, str]:
 
 
 def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
-                          port: Portfolio, sim: SimulationResult, n_starts: int,
-                          cvar_alpha: float = 0.95) -> dict:
+                          port: Portfolio, sim: SimulationResult, cvar_alpha: float = 0.95) -> dict:
     rc = port.constraints
     w = np.asarray(port.weights, float)
     n = len(w)
@@ -248,9 +247,14 @@ def describe_optimization(req: Request, risk: RiskAssessment, est: Estimates, ta
               "candidate with the highest chance and worked out the monthly contribution that would be needed.")),
         ]
     else:
-        solver = ("a linear-programming solver (HiGHS) over the historical months" if port.method == "cvar"
-                  else f"a numerical solver (SLSQP), started from {n_starts} different starting mixes so it does "
-                       "not get stuck on a second-best answer")
+        if port.method == "cvar":
+            solver = "a linear-programming solver (HiGHS) over the historical months"
+        elif port.method in ("risk_parity", "max_diversification"):
+            solver = ("a numerical solver (SLSQP), started from "
+                      + ("inverse-volatility weights" if port.method == "risk_parity" else "equal weights"))
+        else:
+            solver = ("a numerical solver (SLSQP), started from several different starting mixes so it does "
+                      "not get stuck on a second-best answer")
         steps.append(("Search for the best mix",
                       f"Using {solver}, the optimizer searched all the ways to split your money that follow "
                       f"every rule and kept the one that {obj_phrase}."))

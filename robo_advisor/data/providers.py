@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import time
+import zlib
 from pathlib import Path
 from typing import Protocol
 
@@ -119,9 +120,13 @@ _ETF_SPEC: dict[str, tuple[dict[str, float], float, float, int]] = {
     "SPY": ({"US": 1.0}, 0.004, 0.014, 4),
     "VTV": ({"VALUE": 1.0}, 0.010, 0.024, 4),
     "VB": ({"US": 0.75, "VALUE": 0.40}, 0.050, 0.015, 4),       # small caps: higher beta and own risk
+    "VUG": ({"GROWTH": 1.0}, 0.010, 0.005, 4),
+    "VO": ({"US": 0.85, "VALUE": 0.20}, 0.035, 0.015, 4),       # mid caps: between large and small caps
+    "VV": ({"US": 1.0}, 0.004, 0.012, 4),
     "HYG": ({"AGG": 0.55, "US": 0.30}, 0.030, 0.055, 12),        # credit: part rates, part equity risk
     "SLV": ({"GOLD": 1.25}, 0.170, 0.000, 0),                    # silver: gold beta plus its own noise
     "IEFA": ({"INTL": 1.0}, 0.010, 0.029, 4),
+    "VEA": ({"INTL": 1.0}, 0.010, 0.028, 4),
     # option-income: equity beta below 1 (calls sold), high monthly distributions
     "SPYI": ({"US": 0.80}, 0.020, 0.120, 12),
     "QQQI": ({"GROWTH": 0.80}, 0.025, 0.135, 12),
@@ -230,7 +235,8 @@ class SyntheticProvider:
             raise KeyError(f"no synthetic calibration for {ticker}")
         base = self._base_returns()
         info = CATALOG[ticker]
-        rng = np.random.default_rng(self.seed * 1000 + sum(map(ord, ticker)))
+        # one random stream per ticker (a letter-sum seed gave e.g. SPY, VWO and VYM the same noise)
+        rng = np.random.default_rng([self.seed, zlib.crc32(ticker.encode())])
         tr = self._total_log_returns(ticker, rng)
         _, _, yld, freq = _etf_spec(ticker)
         idx = base.index
@@ -427,7 +433,7 @@ class YahooProvider:
                                    f"{type(last).__name__}: {last}")
 
     def _cache_fresh(self, path: Path, df: pd.DataFrame, end: dt.date) -> bool:
-        last =df.index[-1].date() if len(df) else dt.date.min
+        last = df.index[-1].date() if len(df) else dt.date.min
         wanted = min(end, dt.date.today())
         behind = len(trading_calendar(last + dt.timedelta(days=1), wanted)) if wanted > last else 0
         if behind <= 1:                            # today's bar may not exist yet

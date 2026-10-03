@@ -11,11 +11,11 @@ from robo_advisor.review import Reviewer
 from robo_advisor.universe import CATALOG, RISK_NOTE_PREFIX, UniverseError, category_of, resolve_universe
 
 EXPECTED = {
-    "Equity ETFs": ["SPY", "VOO", "VTI", "QQQ", "VTV", "VB"],
-    "Bond ETFs": ["BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX"],
+    "Equity ETFs": ["SPY", "VOO", "VTI", "QQQ", "VUG", "VTV", "VB", "VO", "VV"],
+    "Bond ETFs": ["BND", "TLT", "SCHR", "VTEB", "HYG", "SCHP", "BNDX"],
     "Risk-free Short-term Treasury ETFs": ["BIL", "SGOV"],
     "Commodity ETFs": ["GLD", "SLV"],
-    "International Equity ETFs": ["VXUS", "IEFA", "VWO"],
+    "International Equity ETFs": ["VXUS", "IEFA", "VWO", "VEA"],
     "Real Estate ETFs": ["VNQ", "SCHH"],
     "Dividend ETFs": ["SCHD", "VYM", "DGRO"],
     "Income ETFs": ["SPYI", "QQQI", "JEPI"],
@@ -75,7 +75,7 @@ def test_invalid_catalog_entry_rejected(monkeypatch):
 
 def test_resolve_by_category_and_ticker():
     got = resolve_universe(["bond etfs", "SPY", "IBIT", "HYG"], EXPECTED)
-    assert got == ["SPY", "BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX", "IBIT"]   # configured order, no duplicates
+    assert got == ["SPY", "BND", "TLT", "SCHR", "VTEB", "HYG", "SCHP", "BNDX", "IBIT"]   # configured order, no duplicates
     assert category_of("HYG", EXPECTED) == "Bond ETFs"
     with pytest.raises(UniverseError, match="Crypto ETFs"):
         resolve_universe(None, EXPECTED)                                  # the client must choose
@@ -87,7 +87,7 @@ def test_interactive_selection_by_category(settings, monkeypatch, capsys):
     # Equity: 1,2 | Bond: all | Treasury: bad input then 2 | the rest skipped
     answers = iter(["1,2", "all", "9", "2", "", "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
-    assert choose_etfs(settings) == ["SPY", "VOO", "BND", "TLT", "HYG", "VTEB", "SCHR", "SCHP", "BNDX", "SGOV"]
+    assert choose_etfs(settings) == ["SPY", "VOO", "BND", "TLT", "SCHR", "VTEB", "HYG", "SCHP", "BNDX", "SGOV"]
     assert "Investment universe (ETFs by category)" in capsys.readouterr().out
 
 
@@ -122,7 +122,7 @@ def test_category_limits_from_config_and_client(settings, provider):
                     "Real Estate ETFs": 0.20, "Crypto ETFs": 0.02}  # config defaults + client overrides
     w = res.state["portfolio"].weight_map()
     assert w["IBIT"] <= 0.02 + 1e-6
-    assert sum(w[t] for t in ("SPY", "VOO", "VTI", "QQQ", "VTV", "VB")) <= 0.40 + 1e-6
+    assert sum(w[t] for t in settings.universe.categories["Equity ETFs"]) <= 0.40 + 1e-6
     assert all(r.ok for r in res.latest_reviews())
 
 

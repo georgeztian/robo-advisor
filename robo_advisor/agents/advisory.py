@@ -87,7 +87,8 @@ class IntakeAgent:
             tickers=tickers, method="goal" if g.has_target else method, rebalancing=rb,
             target_probability=pref.target_probability or s.optimization.goal.target_probability,
             goal_risk_metric=pref.goal_risk_metric or s.optimization.goal.risk_metric,
-            data_tickers=sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker}))
+            # menu order, then the reference series (benchmark, risk-free) unless already selected
+            data_tickers=list(dict.fromkeys([*tickers, s.data.benchmark, s.data.risk_free_ticker])))
         return {"request": req}
 
 
@@ -359,8 +360,7 @@ class ExplainerAgent:
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
                       st["market"].synthetic, s)
         exp.optimization = describe_optimization(st["request"], st["risk"], st["estimates"], st["tax"],
-                                                 st["portfolio"], st["simulation"], s.optimization.n_starts,
-                                                 s.optimization.cvar_alpha)
+                                                 st["portfolio"], st["simulation"], s.optimization.cvar_alpha)
         prs = portfolio_risk_stats(st["portfolio"].weights, st["estimates"], s.estimation.var_confidence,
                                    s.estimation.trading_days)
         return {"explanation": exp, "portfolio_risk": prs}

@@ -38,11 +38,11 @@ a report is produced.
 
 | Category | ETFs |
 |---|---|
-| Equity ETFs | SPY, VOO, VTI, QQQ, VTV, VB |
-| Bond ETFs | BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX |
+| Equity ETFs | SPY, VOO, VTI, QQQ, VUG, VTV, VB, VO, VV |
+| Bond ETFs | BND, TLT, SCHR, VTEB, HYG, SCHP, BNDX |
 | Risk-free Short-term Treasury ETFs | BIL, SGOV |
 | Commodity ETFs | GLD, SLV |
-| International Equity ETFs | VXUS, IEFA, VWO |
+| International Equity ETFs | VXUS, IEFA, VWO, VEA |
 | Real Estate ETFs | VNQ, SCHH |
 | Dividend ETFs | SCHD, VYM, DGRO |
 | Income ETFs | SPYI, QQQI, JEPI |
@@ -333,7 +333,7 @@ Common options:
 | `--as-of YYYY-MM-DD\|today` | Analysis date for `run`, `data` and `monitor`; data after it is never used (default: today; for `run`, an `as_of` date written in the profile is used if present) |
 | `--out FOLDER` | Where the report, audit and profile are written (default `out`) |
 | `--risk-free etf\|fred` | Risk-free rate from the BIL ETF (default) or the FRED 3-month T-bill rate |
-| `--config FILE.yaml` | Override settings (see Configuration) |
+| `--config FILE.yaml` | A YAML file with only the settings to change; they override `default.yaml` for that run only (setting names: see Configuration) |
 
 Exit codes:
 
@@ -361,22 +361,11 @@ To change a setting, edit that file in a plain-text editor and save it.
 Every command uses it, so the change applies from the next run. A misspelled setting name or an
 invalid value is reported as an `INPUT PROBLEM` naming it, rather than silently ignored.
 
-To try a different value for one run without changing `default.yaml`, put just that setting in
-another file and pass it with `--config`; it overrides `default.yaml` for that run only:
-```yaml
-# try.yaml
-optimization:
-  max_position: 0.30
-```
-```
-./ra run --profile clients/client_name.json --config try.yaml --as-of today --out clients/client_name
-```
-
 ### Customization
 
 | To change | Edit | What to do |
 |---|---|---|
-| Which ETFs are offered, and their categories | `universe.categories` in `default.yaml` | List the tickers under each category. A ticker may be in only one category. To add a category, add a new name with its tickers, and give it a limit under `optimization.category_limits` if it needs one. If you rename or remove a category, rename or remove its entry under `optimization.category_limits` too. Every ticker needs a catalog entry (next row) |
+| Which ETFs are offered, and their categories | `universe.categories` in `default.yaml` | List the tickers under each category. A ticker may be in only one category. The order of the list is the menu order: it sets the numbers clients type in the questionnaire, and the order of `./ra etfs`, `./ra data` and the report's per-ETF tables (holdings are listed by weight). To add a category, add a new name with its tickers, and give it a limit under `optimization.category_limits` if it needs one. If you rename or remove a category, rename or remove its entry under `optimization.category_limits` too. Every ticker needs a catalog entry (next row) |
 | An ETF's facts: name, asset class, inception date, expense ratio | The `CATALOG` list in [`robo_advisor/universe.py`](robo_advisor/universe.py) | Edit its `ETFInfo(...)` line. The inception date is written `D(YYYY, M, D)`; `expense_ratio` is a decimal (`0.0003` = 0.03 %). To add an ETF, copy a similar line, change every field (including the distribution fields in the next row), then add the ticker to a category above. Optional `risk_note="…"` adds a special-risk disclosure to any report that holds the ETF |
 | Distributions: their types and percentages | The same `ETFInfo(...)` line | Set the kind of income with `income_type` and the percentages with `roc_fraction` and `qualified_fraction`, as described in [Distribution types](#distribution-types) below. Take the percentages from the fund's latest tax-year reports. `collectible=True` marks physical gold or silver, whose gains are taxed at the collectibles rate |
 | Default tax rates | `tax:` in `default.yaml` | Set `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate` and `state_rate` as decimals. They apply only to clients with `"taxes": {"enabled": true}`, and a rate in the client's `taxes` block overrides the default. Route A saves all five rates in the profile, so later changes here don't affect those profiles. `collectibles_rate` (gold and silver ETFs) can be set only here, and is capped at the client's ordinary rate |

@@ -109,7 +109,7 @@ def validate(frames: dict[str, pd.DataFrame], window_start: dt.date, as_of: dt.d
             warnings.append(f"{t}: implausible distribution yield {yld:.1%}")
         out[t] = TickerQuality(
             ticker=t, inception=inception, first_obs=first, last_obs=last,
-            years_available=round(years, 2), meets_min_history=meets,
+            years_available=years, meets_min_history=meets,   # unrounded: displays match the warning
             missing_days=len(missing_idx), max_gap_days=max_gap,
             adj_consistency_max_error=err, n_splits=n_splits, n_distributions=n_div,
             expense_ratio=info.expense_ratio if info else None, issues=issues)
