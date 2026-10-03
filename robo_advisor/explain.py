@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .config import Settings
 from .models import (BenchmarkResult, DataQualityReport, Estimates, Explanation, Portfolio, Projection,
                      Request, RiskAssessment, ScenarioResult, SimulationResult, TaxContext)
 from .optimization.methods import METHOD_LABELS, method_descriptions
@@ -24,6 +25,7 @@ REPORT_DISCLAIMER = (
     "Investing involves risk, including the possible loss of principal. You are solely responsible for "
     "conducting your own research and should consult a licensed financial professional before making "
     "any investment choices.")
+
 
 def method_label(method: str) -> str:
     return METHOD_LABELS.get(method, method)
@@ -83,15 +85,19 @@ def _reason(i: int, w: np.ndarray, est: Estimates, rc: np.ndarray, corr_to_port:
     return s[0].upper() + s[1:] + "."
 
 
+def _years(months: int) -> str:
+    """'15' for 180 months, '1.5' for 18."""
+    y = months / 12
+    return f"{y:.0f}" if y == round(y) else f"{y:.1f}"
+
+
 def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext, port: Portfolio,
             sim: SimulationResult, proj: Projection, bench: BenchmarkResult,
             scenarios: list[ScenarioResult], dq: DataQualityReport, synthetic: bool,
-            inflation: float, lookback_years: int = 20, min_history_years: float = 20,
-            cvar_alpha: float = 0.95,
-            categories: dict[str, list[str]] | None = None) -> Explanation:
+            s: Settings) -> Explanation:
     w = port.weights
     mu = tax.mu_after_tax if tax.mu_after_tax is not None else est.mu
-    categories = categories or {}
+    categories = s.universe.categories
     rc = risk_contributions(w, est.cov)
     port_cov = est.cov @ w
     sp = np.sqrt(w @ est.cov @ w)
@@ -150,12 +156,12 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
             how = (f"the optimizer maximizes estimated portfolio return subject to the "
                    f"{risk.max_volatility:.0%} volatility limit implied by your mapped risk profile")
         else:
-            desc = method_descriptions(cvar_alpha).get(port.method, method_label(port.method))
+            desc = method_descriptions(s.optimization.cvar_alpha).get(port.method, method_label(port.method))
             how = (f"the portfolio was built with the method you chose, {port.method.replace('_', ' ')} "
                    f"({desc[0].lower() + desc[1:]}), within the {risk.max_volatility:.0%} volatility limit "
                    f"implied by your mapped risk profile")
         goal_text = (
-            f"Because you did not specify a target amount, {how}. Over your {req.months / 12:.0f}-year "
+            f"Because you did not specify a target amount, {how}. Over your {_years(req.months)}-year "
             f"horizon the median simulated portfolio value is {money(sim.percentiles[50])}.")
     portfolio_text = (
         f"Estimated annual return {port.expected_return:.2%}"
@@ -167,9 +173,10 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
 
     methodology = [
         f"Optimization: {method_label(port.method)}.",
-        f"Estimation window: {est.window_start} to {est.window_end} (most recent {lookback_years} years, "
-        "maximum available history for younger ETFs).",
-        "Risk (volatility, covariance) from daily adjusted total returns, annualized x252; covariance "
+        f"Estimation window: {est.window_start} to {est.window_end} (most recent {s.data.lookback_years} "
+        "years, maximum available history for younger ETFs).",
+        f"Risk (volatility, covariance) from daily adjusted total returns, annualized "
+        f"x{s.estimation.trading_days}; covariance "
         "estimated pairwise over overlapping history" + (" and repaired to the nearest positive "
                                                          "semi-definite matrix." if est.psd_repaired else "."),
         "Expected returns from monthly total returns (arithmetic mean x12)"
@@ -177,12 +184,12 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
         f"Monte Carlo: {sim.n_paths:,} paths, monthly {sim.distribution} returns, contributions added monthly "
         f"at target weights, {describe_rebalancing(req.rebalancing).lower()}"
         + (", taxes applied." if tax.rates.enabled else "."),
-        f"Benchmark: S&P 500 (VOO total return), {bench.start} to {bench.end}, same initial investment, "
+        f"Benchmark: S&P 500 ({s.data.benchmark} total return), {bench.start} to {bench.end}, same initial investment, "
         "contributions and monthly return convention.",
     ]
     assumptions = [
         f"Risk-free rate ({est.risk_free_source}): {est.risk_free:.2%} per year.",
-        f"Inflation assumption: {inflation:.1%} per year (real value of the deterministic projection: "
+        f"Inflation assumption: {s.simulation.inflation:.1%} per year (real value of the deterministic projection: "
         f"{money(proj.fv_real)}).",
         f"Constraints: {'short sales allowed, gross exposure <= ' + format(port.constraints.max_gross_leverage, '.0%') if port.constraints.allow_short else 'long-only'}"
         f", position limits {_position_limits_text(port.constraints)}, max volatility {port.constraints.max_volatility:.0%}"
@@ -204,7 +211,7 @@ def explain(req: Request, risk: RiskAssessment, est: Estimates, tax: TaxContext,
     ]
     short = [t for t, q in dq.tickers.items() if not q.meets_min_history and t in req.tickers]
     if short:
-        limitations.append(f"Less than {min_history_years:g} years of history (maximum available used): " + ", ".join(
+        limitations.append(f"Less than {s.data.min_history_years:g} years of history (maximum available used): " + ", ".join(
             f"{t} ({dq.tickers[t].years_available:.1f}y)" for t in short) + ".")
     limitations += [f"Benchmark note: {n}" for n in bench.notes]
     disclosures = [DISCLOSURE_ESTIMATES, DISCLOSURE_SCENARIOS]   # "not advice" is REPORT_DISCLAIMER's job

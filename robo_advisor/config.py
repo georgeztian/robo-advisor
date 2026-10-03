@@ -9,6 +9,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "default.yaml"
+# answer codes of the horizon question, which is answered from the goal (derive_from_goal)
+HORIZON_CODES = ("under_3y", "3_5y", "5_10y", "10_20y", "over_20y")
 
 
 class _Cfg(BaseModel):
@@ -49,11 +51,23 @@ class Questionnaire(_Cfg):
     tolerance: list[Question]
 
     @model_validator(mode="after")
-    def _weights_sum_to_one(self):
+    def _consistent(self):
         for name in ("capacity", "tolerance"):
-            total = sum(q.weight for q in getattr(self, name))
+            qs = getattr(self, name)
+            total = sum(q.weight for q in qs)
             if abs(total - 1.0) > 1e-9:
                 raise ValueError(f"{name} question weights sum to {total}, expected 1.0")
+            ids = [q.id for q in qs]
+            if len(set(ids)) < len(ids):
+                raise ValueError(f"{name} question ids are not unique: "
+                                 f"{sorted({i for i in ids if ids.count(i) > 1})}")
+        if any(q.derive_from_goal for q in self.tolerance):
+            raise ValueError("derive_from_goal is only supported for capacity questions")
+        for q in self.capacity:
+            missing = [c for c in HORIZON_CODES if c not in q.options]
+            if q.derive_from_goal and missing:
+                raise ValueError(f"question {q.id} is answered from the goal (derive_from_goal), so its "
+                                 f"options must include {', '.join(HORIZON_CODES)}; missing {missing}")
         return self
 
 
@@ -64,7 +78,7 @@ class UniverseCfg(_Cfg):
 
     @model_validator(mode="after")
     def _known_and_unique(self):
-        from .universe import CATALOG
+        from .universe import CATALOG, catalog_problems
 
         seen: dict[str, str] = {}
         for cat, tickers in self.categories.items():
@@ -76,6 +90,9 @@ class UniverseCfg(_Cfg):
                 if t in seen:
                     raise ValueError(f"universe ticker {t} is listed in both {seen[t]!r} and {cat!r}")
                 seen[t] = cat
+        bad = catalog_problems(seen)
+        if bad:
+            raise ValueError("; ".join(bad))
         return self
 
     @property
@@ -168,14 +185,14 @@ class BenchmarkCfg(_Cfg):
 
 
 class TaxCfg(_Cfg):
-    ordinary_rate: float = 0.24
-    qualified_dividend_rate: float = 0.15
-    ltcg_rate: float = 0.15
-    stcg_rate: float = 0.24
-    collectibles_rate: float = 0.28
-    state_rate: float = 0.0
-    capital_loss_ordinary_offset: float = 3000
-    assumed_turnover: float = 0.10
+    ordinary_rate: float = Field(0.24, ge=0, lt=1)
+    qualified_dividend_rate: float = Field(0.15, ge=0, lt=1)
+    ltcg_rate: float = Field(0.15, ge=0, lt=1)
+    stcg_rate: float = Field(0.24, ge=0, lt=1)
+    collectibles_rate: float = Field(0.28, ge=0, lt=1)
+    state_rate: float = Field(0.0, ge=0, lt=1)
+    capital_loss_ordinary_offset: float = Field(3000, ge=0)
+    assumed_turnover: float = Field(0.10, ge=0, le=1)
     liquidate_at_horizon: bool = False
 
 
@@ -219,6 +236,15 @@ class Settings(_Cfg):
                 raise ValueError(f"category limit for unknown category {cat!r}")
             if not 0 < lim <= 1:
                 raise ValueError(f"category limit for {cat!r} must be in (0, 1], got {lim}")
+        return self
+
+    @model_validator(mode="after")
+    def _reference_etfs_known(self):
+        from .universe import CATALOG
+
+        for role, t in (("benchmark", self.data.benchmark), ("risk_free_ticker", self.data.risk_free_ticker)):
+            if t not in CATALOG:
+                raise ValueError(f"data.{role} {t} has no entry in the ETF catalog")
         return self
 
     @model_validator(mode="after")

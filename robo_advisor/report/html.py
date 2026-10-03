@@ -99,6 +99,8 @@ def render(result: RunResult, settings=None, mermaid: str = "") -> str:
         review_summary=f"{passed}/{n} checks passed" + (
             f" (after {len(superseded)} remediated attempt(s))" if superseded else ""),
         var_pct=f"{(s.estimation.var_confidence if s else 0.95):.0%}",
+        benchmark_ticker=s.data.benchmark if s else "VOO",
+        min_years=f"{(s.data.min_history_years if s else 20):g}", dq_warnings=dq.warnings,
         tax=st["tax"], tax_labels=SCHEDULE_LABELS, pct=lambda v: f"{v:.1%}",
         trace=result.trace, mermaid=mermaid, disclaimer=REPORT_DISCLAIMER,
         calculations=json.dumps(exp.calculations, indent=2, default=_json_default))
@@ -144,6 +146,7 @@ def audit_bundle(result: RunResult) -> dict:
         "tax_rates": {"enabled": req.client.taxes.enabled,
                       "schedule": {k: {"federal": f, "state": s} for k, (f, s) in st["tax"].schedule.items()},
                       "by_etf": [{"ticker": e["ticker"], "treatment": e["treatment"],
+                                  "return_of_capital": e.get("roc", 0.0),
                                   **{k: {"federal": e[k][0], "state": e[k][1]} for k in ("income", "lt", "st")}}
                                  for e in st["tax"].by_etf]},
         "estimates": {"tickers": est.tickers, "mu": est.mu.tolist(), "sigma": est.sigma.tolist(),

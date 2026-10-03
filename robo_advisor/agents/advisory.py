@@ -75,16 +75,16 @@ class IntakeAgent:
             raise ValueError(f"unknown optimization method {method!r}; choose from {METHODS}")
         if not client.goal.has_target and method == "target_return" and pref.target_return is None:
             raise ValueError("the target_return method needs preferences.target_return (annual return)")
-        rb = s.rebalancing.model_copy(update={k: v for k, v in {
-            "type": pref.rebalancing_type, "frequency": pref.rebalancing_frequency,
-            "threshold": pref.rebalancing_threshold}.items() if v is not None})
+        overrides = {"type": pref.rebalancing_type, "frequency": pref.rebalancing_frequency,
+                     "threshold": pref.rebalancing_threshold}
+        rb = RebalancingCfg(**(s.rebalancing.model_dump() | {k: v for k, v in overrides.items() if v is not None}))
         g = client.goal
         req = Request(
             client=client, as_of=as_of, window_start=years_before(as_of, s.data.lookback_years),
             months=g.months(as_of), W0=g.initial_investment, C=g.monthly_contribution,
             target=g.target_amount if g.has_target else None,
             target_date=g.target_date if g.has_target else None, has_target=g.has_target,
-            tickers=tickers, method="goal" if g.has_target else method, rebalancing=RebalancingCfg(**rb.model_dump()),
+            tickers=tickers, method="goal" if g.has_target else method, rebalancing=rb,
             target_probability=pref.target_probability or s.optimization.goal.target_probability,
             goal_risk_metric=pref.goal_risk_metric or s.optimization.goal.risk_metric,
             data_tickers=sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker}))
@@ -357,13 +357,12 @@ class ExplainerAgent:
         s = self.sv.settings
         exp = explain(st["request"], st["risk"], st["estimates"], st["tax"], st["portfolio"], st["simulation"],
                       st["projection"], st["benchmark"], st["scenarios"], st["data_quality"],
-                      st["market"].synthetic, s.simulation.inflation, lookback_years=s.data.lookback_years,
-                      min_history_years=s.data.min_history_years, cvar_alpha=s.optimization.cvar_alpha,
-                      categories=s.universe.categories)
+                      st["market"].synthetic, s)
         exp.optimization = describe_optimization(st["request"], st["risk"], st["estimates"], st["tax"],
                                                  st["portfolio"], st["simulation"], s.optimization.n_starts,
                                                  s.optimization.cvar_alpha)
-        prs = portfolio_risk_stats(st["portfolio"].weights, st["estimates"], s.estimation.var_confidence)
+        prs = portfolio_risk_stats(st["portfolio"].weights, st["estimates"], s.estimation.var_confidence,
+                                   s.estimation.trading_days)
         return {"explanation": exp, "portfolio_risk": prs}
 
 

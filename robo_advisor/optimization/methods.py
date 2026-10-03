@@ -24,7 +24,6 @@ METHODS = ("mean_variance", "min_volatility", "max_sharpe", "cvar", "target_retu
            "risk_parity", "max_diversification")
 
 
-
 def method_descriptions(cvar_alpha: float = 0.95) -> dict[str, str]:
     """Plain-language descriptions shown to clients (questionnaire menu, report). Every method
     keeps the portfolio within the client's risk limit and position / category limits."""

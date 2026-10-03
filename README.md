@@ -25,7 +25,7 @@ a report is produced.
 
 | Stage | What happens |
 |---|---|
-| Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, 9 risk-capacity and 8 risk-tolerance questions, ETF choice by category, short selling, a minimum and maximum position for each ETF, tax preferences |
+| Client input | Goal (a target amount by a date, or no target), initial investment, monthly contribution, risk-capacity and risk-tolerance questions, ETF choice by category, short selling, a minimum and maximum position for each ETF, tax preferences |
 | Risk profile | Capacity and tolerance scores (0–100) are kept separate. **Mapped score = min(capacity, tolerance)**, which maps to a volatility limit (5 %–25 %, configurable) |
 | Market data | Up to 20 years of real daily prices from Yahoo Finance, validated for gaps, splits, distributions and look-ahead |
 | Optimization | **Target client:** the lowest-risk portfolio with at least an 80 % chance (configurable) of reaching the target. **No target:** one of 7 methods; the default is the highest expected return within the risk limit. Always subject to each ETF's **minimum and maximum position** and the **per-category limits**. The report writes out the optimization problem in mathematical form and in plain English |
@@ -97,7 +97,6 @@ The menu is defined in `robo_advisor/config/default.yaml`, and each fund's facts
 
 ## How to use it
 
-
 ### Step 1: Install Python and Git (once)
 1. **Python 3.10 or newer:** https://www.python.org/downloads/
    - **Windows:** on the installer's first screen, tick **"Add python.exe to PATH"**.
@@ -153,8 +152,8 @@ The app asks, in order:
    asks for the target amount and date (YYYY-MM-DD).
 2. The initial investment and monthly contribution in dollars, then, if there is no target,
    the investment horizon in years.
-3. **9 risk-capacity questions** and **8 risk-tolerance questions**. Type the number of the
-   answer. The investment-horizon question is answered automatically from the goal.
+3. The **risk-capacity questions**, then the **risk-tolerance questions**. Type the number of
+   the answer. The investment-horizon question is answered automatically from the goal.
 4. **ETFs, category by category.** For each category, type the numbers of the ETFs
    to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
 5. Whether short sales are allowed, then the **position limits**: keep 0 %–50 % for every ETF
@@ -183,7 +182,8 @@ lower case, with spaces and punctuation replaced by `_`. For example, "Jane Doe"
 if it doesn't exist (`mkdir clients`). Either:
 
 - copy a profile saved by Route A (`…_profile.json`) and change it, or
-- paste this skeleton into a new file and replace every `<…>` placeholder:
+- paste this skeleton (written for the default questions) into a new file and replace every
+  `<…>` placeholder:
 
 ```json
 {
@@ -231,8 +231,8 @@ field name, is reported as an `INPUT PROBLEM` naming the field.
 | `goal.target_amount`, `goal.target_date` | Only if `has_target` is `true`, e.g. `500000` and `"2036-12-31"` |
 | `goal.horizon_years` | Only if `has_target` is `false`, e.g. `15` |
 | `goal.initial_investment`, `goal.monthly_contribution` | Dollar amounts (numbers without `$` or commas) |
-| `capacity_answers` | One answer code for each of the 9 capacity questions. `./ra questionnaire` lists 10; leave out `investment_horizon`, which is derived from the goal |
-| `tolerance_answers` | One answer code for each of the 8 tolerance questions |
+| `capacity_answers` | One answer code for each capacity question that `./ra questionnaire` lists, except `investment_horizon`, which is derived from the goal |
+| `tolerance_answers` | One answer code for each tolerance question that `./ra questionnaire` lists |
 | `universe` | **Required.** Tickers and/or whole categories, e.g. `["Bond ETFs", "Dividend ETFs", "SPY", "GLD"]` |
 | `constraints` | `allow_short` (`true`/`false`); optional `min_position` and `max_position`, the limits for every ETF (defaults `0` and `0.5`); optional `position_limits` for individual ETFs, e.g. `{"BND": {"min": 0.1, "max": 0.3}, "IBIT": {"max": 0.02}}` (either key can be left out); `max_gross_leverage` when shorting; optional `category_limits`, e.g. `{"Crypto ETFs": 0.02, "Equity ETFs": 0.6}`, which overrides the defaults for the named categories (`1.0` removes a limit) |
 | `taxes` | `{"enabled": false}`, or `enabled: true` with `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate`, `state_rate` (decimals, e.g. `0.24`); optional `liquidate_at_horizon` (`true` to include the tax on selling everything at the end; default `false`) |
@@ -274,7 +274,9 @@ From top to bottom:
   special-risk ETF notes). Expandable tables at the end: **Parameter estimates (historical)**,
   **Asset characteristics & data integrity** (each ETF's inception, history, fees and data
   checks), and **Tax rates** (each selected ETF's federal, state and combined rates on its
-  distributions, long-term and short-term gains; all 0 % for a pre-tax analysis).
+  distributions, long-term and short-term gains; all 0 % for a pre-tax analysis). The part of a
+  distribution that is return of capital is not taxed when paid; it is taxed as a capital gain
+  when the shares are sold.
 - **Independent review:** every rule the reviewer checked, and the agent workflow trace.
 - **Disclaimer:** the outputs are informational only, not financial, investment, legal or
   trading advice.
@@ -369,6 +371,32 @@ optimization:
 ./ra run --profile clients/client_name.json --config my.yaml --as-of today --out clients/client_name
 ```
 
+### Customization
+
+| To change | Edit | What to do |
+|---|---|---|
+| Which ETFs are offered, and their categories | `universe.categories` in your `my.yaml` | List the tickers under each category. A list you give replaces that category's default list, so repeat the tickers you want to keep. A new category name adds a category; give it a limit under `optimization.category_limits` if it needs one. A ticker may be in only one category. A default category can't be removed from `my.yaml`. Every ticker needs a catalog entry (next row) |
+| An ETF's facts: name, asset class, inception date, expense ratio | The `CATALOG` list in [`robo_advisor/universe.py`](robo_advisor/universe.py) | Edit its `ETFInfo(...)` line. The inception date is written `D(YYYY, M, D)`; `expense_ratio` is a decimal (`0.0003` = 0.03 %). To add an ETF, copy a similar line, change every field (including the distribution fields in the next row), then add the ticker to a category above. Optional `risk_note="…"` adds a special-risk disclosure to any report that holds the ETF |
+| An ETF's distributions: how they are taxed | The same `ETFInfo(...)` line | `income_type`: `qualified` (stock dividends), `mixed` (part qualified), `reit`, `interest` (taxable bonds), `treasury` (federal tax only), `tax_exempt` (municipal bonds: state tax only) or `none` (no distributions). `roc_fraction` (optional, 0–1): the share that is return of capital, from the fund's tax-year reports. It is not taxed when paid; it lowers the cost basis, so it is taxed as a capital gain when the shares are sold. `qualified_fraction`: the share of the rest taxed at the qualified-dividend rate (0–1), from the fund's latest tax-year "QDI %"; the remainder is taxed as ordinary income. `collectible=True` for physical gold or silver (gains taxed at the collectibles rate) |
+| Distribution amounts | Nothing for real data | Real dividends come with the market data (Yahoo, or the `dividend` column of your CSV files). For synthetic data only, an ETF's yield and payment frequency can be set in `_ETF_SPEC` in [`robo_advisor/data/providers.py`](robo_advisor/data/providers.py); an ETF not listed there gets a typical value for its type |
+| Default tax rates | `tax:` in your `my.yaml` (defaults in `default.yaml`) | Set `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate` and `state_rate` as decimals. They apply only to clients with `"taxes": {"enabled": true}`, and a rate in the client's `taxes` block overrides the default. Route A saves all five rates in the profile, so later changes here don't affect those profiles. `collectibles_rate` (gold and silver ETFs) can be set only here, and is capped at the client's ordinary rate |
+| Risk capacity and risk tolerance questions | `questionnaire.capacity` and `questionnaire.tolerance` in your `my.yaml` | Each question has an `id`, `text`, `weight`, `options` (answer code: score 0–100) and optional `labels` (display text per code). Weights in each list must add up to 1.0. The list you give replaces the whole default list, so copy the full list from `default.yaml` and edit it. Keep the answer codes of the question marked `derive_from_goal` (`under_3y` … `over_20y`), which are filled in from the goal. Put quotes around the codes `"yes"` and `"no"` |
+| How the risk score maps to a volatility limit | `risk_bands` in your `my.yaml` | Give the full list with `max_score`, `profile` and `max_volatility`, in increasing `max_score` order; the last band must reach 100 |
+
+Notes:
+
+- Put YAML changes in your own file and pass `--config my.yaml` with every command (see above).
+  `./ra etfs --config my.yaml` and `./ra questionnaire --config my.yaml` show the result.
+- Changes to `universe.py` apply to every run directly. It is part of the app's code, so
+  `git pull` (Step 9) may stop if it conflicts with your edits: keep a copy of your lines first.
+- If you add, remove or rename a question `id` or an answer code, update the client profiles to
+  match. Otherwise the run stops with an `INPUT PROBLEM` listing what is missing or invalid.
+- The settings and the catalog entries of the offered ETFs are checked on every run. A ticker
+  with no catalog entry, an unknown `income_type`, an expense ratio of 0.05 or more (usually a
+  percent typed by mistake), a tax rate outside 0–1, question weights that don't add up to 1.0,
+  a repeated question `id`, a horizon question missing its answer codes, or a score outside
+  0–100 is reported with a message naming the problem.
+
 ## Market data
 
 | Provider | Use |
@@ -443,3 +471,7 @@ Client files contain personal financial data, so keep them out of the repository
 ## Disclaimer
 
 This robo-advisor provides automated, data-driven outputs for informational purposes only and does not constitute financial, investment, legal, or trading advice. All model insights are generated by algorithms based on historical data, which is not a guarantee of future performance or returns. Do not rely on this system as your sole source for making investment decisions. Investing involves risk, including the possible loss of principal. You are solely responsible for conducting your own research and should consult a licensed financial professional before making any investment choices.
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).

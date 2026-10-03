@@ -68,10 +68,10 @@ Execution waves (nodes within a wave run concurrently):
 |---|---|---|
 | intake | §1, §3, §19 steps 1–2, 4–5 | Validate the input; resolve the client's ETF choice (tickers and/or categories); normalize goal, method and rebalancing |
 | risk_profiler | §2 | Capacity and tolerance scored **separately**; mapped = min; band → σ_max |
-| market_data | §3, §6 | Fetch selected ETFs + VOO (benchmark) + BIL (risk-free), truncated at the as-of date |
+| market_data | §3, §6 | Fetch selected ETFs + VOO (benchmark) + BIL (risk-free), both configurable, truncated at the as-of date |
 | data_validation | §3 | Inception, 20-year coverage, gaps, split/distribution-consistent adjusted prices, expense ratios |
 | estimation | §6 | μ from monthly total returns; σ and Σ from daily returns (pairwise, PSD-repaired); VaR, CVaR, MDD, β, Sharpe, Sortino |
-| tax_adjust | §5 | After-tax return series by income type (interest, state-exempt Treasury interest, federal-exempt municipal interest, qualified / mixed dividends, REIT income; collectible gains), gain-realization drag |
+| tax_adjust | §5 | After-tax return series by income type (interest, state-exempt Treasury interest, federal-exempt municipal interest, qualified / mixed dividends, REIT income; return of capital untaxed when paid; collectible gains), gain-realization drag (return of capital adds to the gain) |
 | constraints | §4 | Long-only or Σ\|w\| ≤ L shorts; per-ETF lᵢ ≤ wᵢ and \|wᵢ\| ≤ uᵢ (client minimum / maximum, default 0 % / 50 %; a positive minimum forbids shorting); Σ\|wᵢ\| per category ≤ category limit (config defaults + client overrides); σ ≤ σ_max from the mapped profile |
 | optimizer | §7–§9 | Case A: min risk s.t. P(F_T ≥ F\*) ≥ p. Case B: max E[R] s.t. σ ≤ σ_max, or an alternative method |
 | simulation | §12 | 10,000-path Monte Carlo with contributions, rebalancing and taxes |
@@ -84,17 +84,18 @@ Execution waves (nodes within a wave run concurrently):
 ## Independent reviewer (`robo_advisor/review/`)
 
 The reviewer's own numerics live in `independent.py`. `tests/test_review_isolation.py`
-fails if the reviewer imports the production estimation, optimization, simulation,
-benchmark, tax or questionnaire code. The reviewer recomputes independently:
+fails if the reviewer imports any production computation (data, estimation, tax, questionnaire,
+optimization, simulation, projection, benchmark, rebalancing, explanation or agent code); it may
+use only the config, the data models and the ETF catalog. The reviewer recomputes independently:
 
 * returns from **raw** close, dividends and splits (production uses `adj_close`);
 * capacity and tolerance scores from the configured weights, plus the band lookup;
 * μ and σ for every ETF;
-* its own Monte Carlo with a different seed and a different square-root factorization;
+* its own Monte Carlo, written separately and run with a different seed;
 * FV by month-by-month recursion (production uses the closed form);
 * the S&P 500 ending wealth by a plain loop over month-end prices;
 * an independent re-solve of the Case B objective (max return, max Sharpe or min volatility, with long-only or split shorts);
-* a goal-minimality check: the reviewer builds its own lower-risk frontier and scores it with its own MC. If a portfolio with ≥10% lower volatility also reaches p, the run is blocked;
+* a goal-minimality check: the reviewer builds its own lower-risk frontier and scores it with its own MC. If a portfolio with ≥10% lower volatility also reaches p, the run is blocked (a warning when taxes are on, because the reviewer's MC approximates taxes by drifting at the after-tax return);
 * month-end backtests of **both** benchmark sides, recomputed from raw prices with the same rebalancing rule;
 * a distribution-tax lower bound along the median wealth path, which catches a tax engine that silently drops taxes.
 
@@ -135,7 +136,8 @@ taxes, missing disclosures and a misreported probability.
 
   `robo_advisor/universe.py` holds each ETF's facts: inception date, expense ratio, tax
   character of its distributions (interest, state-tax-exempt Treasury interest, federally tax-exempt municipal interest for VTEB,
-  qualified or mixed dividends, REIT income), collectible status (GLD, SLV), and a special-risk
+  qualified or mixed dividends, REIT income) and its return-of-capital share (SPYI, QQQI, the
+  REIT ETFs), collectible status (GLD, SLV), and a special-risk
   note (the option-income ETFs, IBIT). The config is validated against the catalog. Clients
   choose ETFs by category: the interactive questionnaire goes category by category, and a
   profile file lists tickers and/or category names. There is no implicit "all ETFs" default.
@@ -183,6 +185,11 @@ taxes, missing disclosures and a misreported probability.
   available history inside the 20-year window. Short histories are flagged in validation, the
   explanation and the report, and covariances use pairwise overlap followed by a nearest-PSD
   repair.
+* **Return of capital.** The ROC share of a distribution is not taxed when paid. It lowers the
+  basis by as much as its reinvestment adds, so a reinvested distribution adds basis only for its
+  taxable part, and the ROC is taxed as a capital gain when the shares are sold (rebalancing or
+  liquidation). The optimizer's gain-realization drag counts it the same way. The reviewer
+  re-derives the ROC-adjusted distribution rate independently.
 * **Taxes and shorts.** Only long positions have their distributions taxed and added to basis.
   Payments in lieu on shorts are a non-deductible cost that is already in the total return. The
   optimizer prices short legs at the **pre-tax** return, so a short cannot harvest the tax drag
@@ -193,6 +200,9 @@ taxes, missing disclosures and a misreported probability.
   - The short/long-term split uses a dollar-weighted average acquisition month, not lot-level FIFO.
   - The bootstrap resamples only months in which every selected ETF has data.
   - Selling to pay taxes does not itself realize gains.
+  - Return of capital uses one fixed share per ETF from recent tax years (the real share changes
+    yearly), and ROC above the cost basis is not taxed early. The 20 % deduction on REIT dividends
+    (Section 199A) is not modeled.
   - The reviewer's tax check is a lower bound (distribution taxes), not a full ledger recomputation.
   - Optimizers follow historical estimates, so ETFs with short, strong histories (e.g. IBIT,
     about 2–3 years) are favoured. The per-ETF and per-category limits contain this, and the

@@ -33,7 +33,7 @@ class GraphError(RuntimeError):
 
 
 class GraphHalted(RuntimeError):
-    def __init__(self, message: str, node: str, report: ReviewReport | None, result: "RunResult"):
+    def __init__(self, message: str, node: str, report: ReviewReport | None, result: RunResult):
         super().__init__(message)
         self.node, self.report, self.result = node, report, result
 
@@ -56,7 +56,6 @@ class TraceEvent:
     kind: str
     wave: int
     attempt: int
-    started: float
     seconds: float
     status: str
     outputs: dict[str, str] = field(default_factory=dict)   # key -> sha256[:12]
@@ -99,7 +98,7 @@ class Graph:
         self.nodes: dict[str, Node] = {}
         self._g: nx.DiGraph | None = None
 
-    def add(self, node: Node) -> "Graph":
+    def add(self, node: Node) -> Graph:
         if node.name in self.nodes:
             raise GraphError(f"duplicate node {node.name}")
         self.nodes[node.name] = node
@@ -160,7 +159,7 @@ class Graph:
         try:
             out = node.fn(view)
         except Exception as e:
-            trace.append(TraceEvent(node.name, node.kind, wave, attempt, t0, time.time() - t0,
+            trace.append(TraceEvent(node.name, node.kind, wave, attempt, time.time() - t0,
                                     "error", detail=f"{type(e).__name__}: {e}"))
             raise
         if not isinstance(out, dict) or set(out) != set(node.provides):
@@ -171,7 +170,7 @@ class Graph:
             rep = next(v for v in out.values() if isinstance(v, ReviewReport))
             status = "pass" if rep.ok else "blocked"
             detail = rep.summary()
-        trace.append(TraceEvent(node.name, node.kind, wave, attempt, t0, time.time() - t0, status,
+        trace.append(TraceEvent(node.name, node.kind, wave, attempt, time.time() - t0, status,
                                 {k: _digest(v) for k, v in out.items()}, detail))
         return out
 

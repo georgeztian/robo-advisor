@@ -210,7 +210,7 @@ table.taxes td.num, table.taxes th.num { min-width: 64px; }
     <b>{{ money(bench.metrics.loc["Ending wealth (with monthly contributions)", "S&P 500"]) }}</b> for the S&amp;P 500
     ({{ money(bench.metrics.loc["Total contributed", "Portfolio"]) }} contributed).</p>
   {% for n in bench.notes %}<p class="sub">Note: {{ n }}</p>{% endfor %}
-  <div class="legend"><span><i class="sw" style="background:var(--series-1)"></i>Recommended portfolio</span><span><i class="sw" style="background:var(--series-2)"></i>S&amp;P 500 (VOO)</span></div>
+  <div class="legend"><span><i class="sw" style="background:var(--series-1)"></i>Recommended portfolio</span><span><i class="sw" style="background:var(--series-2)"></i>S&amp;P 500 ({{ benchmark_ticker }})</span></div>
   <h3>Growth of $10,000</h3>
   {{ growth_chart|safe }}
   <h3>Wealth with the same initial investment and monthly contributions</h3>
@@ -238,9 +238,11 @@ table.taxes td.num, table.taxes th.num { min-width: 64px; }
     {% for t, row in corr_rows %}<tr><th>{{ t }}</th>{% for v in row %}<td class="num">{{ "%.2f"|format(v) }}</td>{% endfor %}</tr>{% endfor %}</table></div>
   </details>
   <details><summary>Asset characteristics &amp; data integrity</summary><div class="scroll"><table>
-    <tr><th>ETF</th><th>Inception</th><th>First obs.</th><th class="num">Years</th><th>≥20y</th><th class="num">Missing</th><th class="num">Splits</th><th class="num">Distributions</th><th class="num">Adj. check err</th><th class="num">Expense</th><th>Issues</th></tr>
+    <tr><th>ETF</th><th>Inception</th><th>First obs.</th><th class="num">Years</th><th>≥{{ min_years }}y</th><th class="num">Missing</th><th class="num">Splits</th><th class="num">Distributions</th><th class="num">Adj. check err</th><th class="num">Expense</th><th>Issues</th></tr>
     {% for q in dq_rows %}<tr><td>{{ q.ticker }}</td><td>{{ q.inception }}</td><td>{{ q.first_obs }}</td><td class="num">{{ "%.1f"|format(q.years_available) }}</td><td>{{ 'yes' if q.meets_min_history else 'no (max available used)' }}</td><td class="num">{{ q.missing_days }}</td><td class="num">{{ q.n_splits }}</td><td class="num">{{ q.n_distributions }}</td><td class="num">{{ "%.1e"|format(q.adj_consistency_max_error) }}</td><td class="num">{{ "%.2f%%"|format((q.expense_ratio or 0)*100) }}</td><td>{{ q.issues|join('; ') }}</td></tr>{% endfor %}
-  </table></div></details>
+  </table></div>
+  {% if dq_warnings %}<h3>Data-quality warnings</h3><ul>{% for w in dq_warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+  </details>
   <details><summary>Tax rates</summary>
     {% if taxes %}<p class="sub">Estimated rates from your answers (and the defaults for any you left out). The state rate applies to every kind of income except US Treasury interest; municipal-bond interest is free of federal tax. "Combined" is federal plus state.</p>
     {% else %}<p class="sub">Taxes are not included in this analysis (pre-tax), so every rate below is 0%.</p>{% endif %}
@@ -256,6 +258,7 @@ table.taxes td.num, table.taxes th.num { min-width: 64px; }
         {% for k in ("income", "lt", "st") %}<td class="num">{{ pct(e[k][0]) }}</td><td class="num">{{ pct(e[k][1]) }}</td><td class="num"><b>{{ pct(e[k][0] + e[k][1]) }}</b></td>{% endfor %}</tr>{% endfor %}
     </table></div>
     <p class="sub">Long-term gains are on holdings kept over a year, short-term on holdings sold within a year. Gains are realized when the portfolio is rebalanced{% if taxes %}, and at the end if liquidation at the horizon is included{% endif %}.</p>
+    {% if tax.by_etf | selectattr("roc") | list %}<p class="sub">Return of capital is a fund paying back part of your own investment. It is not taxed when paid, so the distribution rates above apply to the whole distribution and are lower for these ETFs. It lowers your cost basis instead, so it is taxed as a capital gain when the shares are sold.</p>{% endif %}
   </details>
 </section>
 

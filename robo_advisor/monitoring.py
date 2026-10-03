@@ -125,8 +125,8 @@ def assess(prior: dict, req: Request, risk: RiskAssessment, est: Estimates, rate
     if req.has_target and req.target:
         model = MCModel.from_estimates(est, settings.simulation.distribution)
         ws = w / w.sum() if abs(w.sum()) > 1e-9 and abs(w.sum() - 1) > 1e-9 else w
-        raw = simulate(ws, model, req.W0, req.C, req.months,
-                       req.rebalancing, rates, 5000, settings.simulation.seed, record=False)
+        raw = simulate(ws, model, req.W0, req.C, req.months, req.rebalancing, rates,
+                       settings.simulation.n_paths, settings.simulation.seed, record=False)
         term = raw.terminal_after_liq if raw.terminal_after_liq is not None else raw.terminal
         p = float((term >= req.target).mean())
         m["prob_target"] = {"prior": prior.get("simulation", {}).get("prob_target"), "now": p}

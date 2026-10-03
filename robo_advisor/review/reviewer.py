@@ -65,23 +65,26 @@ class Reviewer:
         return [(np.array([1.0 if t in held else 0.0 for t in req.tickers]), lim)
                 for lim, held in self._expected_caps(req).values()]
 
-    def _income_rate(self, t: str) -> float:
-        """Distribution tax rate from the catalog's income character (independent of tax.py)."""
-        tc, ti = self.s.tax, self._tax_in
+    def _income_rate(self, t: str, ti) -> float:
+        """Combined distribution tax rate for the client's tax input ``ti``, from the catalog's
+        income character (independent of tax.py): the return-of-capital share is untaxed, the rest
+        is taxed by its character."""
+        tc = self.s.tax
         g = lambda v, d: d if v is None else v          # noqa: E731
         state = g(ti.state_rate, tc.state_rate)
         ordinary = g(ti.ordinary_rate, tc.ordinary_rate) + state
         qual = g(ti.qualified_dividend_rate, tc.qualified_dividend_rate) + state
         info = CATALOG[t]
+        taxable = 1 - info.roc_fraction
         if info.income_type == "interest":
-            return ordinary
+            return taxable * ordinary
         if info.income_type == "treasury":
-            return ordinary - state
+            return taxable * (ordinary - state)
         if info.income_type == "tax_exempt":
-            return state
+            return taxable * state
         if info.income_type == "none":
             return 0.0
-        return info.qualified_fraction * qual + (1 - info.qualified_fraction) * ordinary
+        return taxable * (info.qualified_fraction * qual + (1 - info.qualified_fraction) * ordinary)
 
     @staticmethod
     def _f(out: list, rule: str, spec: str, sev: str, ok: bool, msg: str, **ev: Any) -> None:
@@ -109,7 +112,8 @@ class Reviewer:
         unflagged = [t for t, q in dq.tickers.items() if not q.meets_min_history
                      and not any(w.startswith(f"{t}:") and "history" in w for w in dq.warnings)]
         f(out, "R-DATA-03", "§3", "BLOCKER", not unflagged,
-          "ETFs with < 20 years of history are flagged (maximum available history used)"
+          f"ETFs with < {self.s.data.min_history_years:g} years of history are flagged (maximum available "
+          "history used)"
           if not unflagged else f"short histories not flagged: {unflagged}")
         f(out, "R-DATA-04", "§3", "BLOCKER", not dq.blocking,
           "data validation passed" if not dq.blocking else "; ".join(dq.blocking))
@@ -303,9 +307,7 @@ class Reviewer:
               "with a feasible target (see R-SIM-04 for the infeasible case)")
             return out
         # candidate lower-risk portfolios on the reviewer's own frontier, scored by its own MC
-        rb = req.rebalancing
-        every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
-        thr = rb.threshold if rb.type == "threshold" else None
+        every, thr = _rebalancing(req.rebalancing)
         w_mv, v_mv = ind.resolve("min_vol", *args, groups=groups)
         r_mv = float(np.clip(w_mv, 0, None) @ mu_l - np.clip(-w_mv, 0, None) @ est.mu)
         n, p, z = self.cfg.mc_paths, req.target_probability, self.cfg.mc_z
@@ -332,7 +334,6 @@ class Reviewer:
         out: list[ReviewFinding] = self._portfolio_rules(st)
         f = self._f
         req, est, port, sim = st["request"], st["estimates"], st["portfolio"], st["simulation"]
-        self._tax_in = req.client.taxes
         proj, bench, scen, exp, market, tax = (st["projection"], st["benchmark"], st["scenarios"],
                                                st["explanation"], st["market"], st["tax"])
         z = self.cfg.mc_z
@@ -361,15 +362,13 @@ class Reviewer:
               "achievable probability and the required contribution")
         # independent Monte Carlo
         w = np.asarray(port.weights, float)
-        rb = req.rebalancing
-        every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
+        every, thr = _rebalancing(req.rebalancing)
         hist = None
         if sim.distribution == "bootstrap":
             h = est.monthly_returns.to_numpy()
             hist = h[~np.isnan(h).any(axis=1)]
         n = self.cfg.mc_paths
-        rt = ind.mc_terminal(w, est.mu, est.cov, req.W0, req.C, req.months, every,
-                             rb.threshold if rb.type == "threshold" else None, n, 777, hist)
+        rt = ind.mc_terminal(w, est.mu, est.cov, req.W0, req.C, req.months, every, thr, n, 777, hist)
         med_r, med_p = float(np.median(rt)), float(np.median(term))
         if not req.client.taxes.enabled:
             if req.has_target:
@@ -385,7 +384,7 @@ class Reviewer:
               f"after-tax median terminal wealth {med_p:,.0f} does not exceed independent pre-tax median {med_r:,.0f}")
             # lower bound: tax on distributions alone along the median wealth path
             y = est.income_yield
-            inc_rate = np.array([self._income_rate(t) for t in port.tickers])
+            inc_rate = np.array([self._income_rate(t, req.client.taxes) for t in port.tickers])
             wl = np.clip(w, 0, None)
             monthly_rate = float(wl @ (y * inc_rate)) / 12
             bound = float(sim.band["p50"].iloc[:-1].sum() * monthly_rate) if sim.band is not None else 0.0
@@ -402,7 +401,7 @@ class Reviewer:
             t = row["ticker"]
             if ti.enabled:
                 exp_lt = (min(tc.collectibles_rate, fed_ord) if CATALOG[t].collectible else g(ti.ltcg_rate, tc.ltcg_rate)) + state
-                want = (self._income_rate(t), exp_lt, g(ti.stcg_rate, tc.stcg_rate) + state)
+                want = (self._income_rate(t, ti), exp_lt, g(ti.stcg_rate, tc.stcg_rate) + state)
             else:
                 want = (0.0, 0.0, 0.0)
             shown = tuple(sum(row[k]) for k in ("income", "lt", "st"))
@@ -443,9 +442,6 @@ class Reviewer:
         # independent month-end backtests of BOTH sides from raw prices
         tol = self.cfg.backtest_rel_tol
         first = bench.growth_of_10k.index[0].to_timestamp(how="start").date()
-        rb = req.rebalancing
-        every = {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency] if rb.type == "calendar" else None
-        thr = rb.threshold if rb.type == "threshold" else None
 
         def close(a: float, b: float) -> bool:
             return abs(a - b) <= tol * max(abs(b), 1.0)
@@ -485,7 +481,7 @@ class Reviewer:
         if special:
             f(out, "R-EXP-07", "§16", "BLOCKER",
               all(any(d.startswith(f"{RISK_NOTE_PREFIX} {t} ") for d in exp.disclosures) for t in special),
-              f"special risks disclosed for held {', '.join(special)} (option-income / crypto)")
+              f"special risks disclosed for held {', '.join(special)}")
         # the optimization problem must be written out with every constraint the run imposed
         opt = exp.optimization or {}
         need = {"budget", "positions", "risk", "gross" if req.client.constraints.allow_short else "no_short"}
@@ -503,6 +499,13 @@ class Reviewer:
                                                   and exp.calculations),
           "methodology, assumptions, limitations and underlying calculations provided")
         return ReviewReport("final", out)
+
+
+def _rebalancing(rb) -> tuple[int | None, float | None]:
+    """(calendar interval in months, drift threshold): one of them is None."""
+    if rb.type == "calendar":
+        return {"monthly": 1, "quarterly": 3, "annual": 12}[rb.frequency], None
+    return None, rb.threshold
 
 
 def _years_before(d: dt.date, years: int) -> dt.date:

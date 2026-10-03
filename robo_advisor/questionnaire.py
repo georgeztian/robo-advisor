@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from .config import Question, Settings
+from .config import HORIZON_CODES, Question, Settings
 from .models import ClientInput, RiskAssessment
 
 
@@ -17,16 +17,9 @@ class QuestionnaireError(ValueError):
 
 
 def horizon_option(months: int) -> str:
+    """The horizon question's answer code: under 3, 3-5, 5-10, 10-20 or over 20 years."""
     years = months / 12
-    if years < 3:
-        return "under_3y"
-    if years < 5:
-        return "3_5y"
-    if years < 10:
-        return "5_10y"
-    if years < 20:
-        return "10_20y"
-    return "over_20y"
+    return HORIZON_CODES[sum(years >= b for b in (3, 5, 10, 20))]
 
 
 def _score_block(questions: list[Question], answers: dict[str, str], derived: dict[str, str],
