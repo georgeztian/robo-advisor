@@ -94,11 +94,11 @@ questionnaire:
 
 universe:                     # the ETFs a client may choose from, by category
   categories:
-    Equity ETFs: [SPY, VOO, VTI, QQQ, VTV, VB]
-    Bond ETFs: [BND, TLT, HYG, VTEB, SCHR, SCHP, BNDX]
+    Equity ETFs: [SPY, VOO, VTI, QQQ, VUG, VTV, VB, VO, VV]
+    Bond ETFs: [BND, TLT, SCHR, VTEB, HYG, SCHP, BNDX]
     Risk-free Short-term Treasury ETFs: [BIL, SGOV]
     Commodity ETFs: [GLD, SLV]
-    International Equity ETFs: [VXUS, IEFA, VWO]
+    International Equity ETFs: [VXUS, IEFA, VWO, VEA]
     Real Estate ETFs: [VNQ, SCHH]
     Dividend ETFs: [SCHD, VYM, DGRO]
     Income ETFs: [SPYI, QQQI, JEPI]

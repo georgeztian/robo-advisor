@@ -406,7 +406,7 @@ def cmd_data(args) -> int:
     unknown = [t for t in tickers if t not in CATALOG]
     if unknown:
         raise ValueError(f"unknown ticker(s) {unknown}; offered ETFs: {', '.join(s.universe.tickers)}")
-    tickers = sorted(set(tickers) | {s.data.benchmark, s.data.risk_free_ticker})
+    tickers = list(dict.fromkeys([*tickers, s.data.benchmark, s.data.risk_free_ticker]))   # menu order
     prov = _provider(s)
     print(f"Fetching {len(tickers)} tickers from {prov.name} ({start} to {as_of}) ...")
     frames = prov.fetch(tickers, start, as_of)

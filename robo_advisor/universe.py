@@ -67,14 +67,17 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
     ETFInfo("VOO", "Vanguard S&P 500 ETF", "US Large-Cap Equity", D(2010, 9, 7), 0.0003, "qualified", 0.97),
     ETFInfo("VTI", "Vanguard Morningstar Total Stock Market ETF", "US Total-Market Equity", D(2001, 5, 24), 0.0003, "qualified", 0.94),
     ETFInfo("QQQ", "Invesco QQQ Trust", "US Nasdaq-100 Equity", D(1999, 3, 10), 0.0018, "qualified", 0.95),
+    ETFInfo("VUG", "Vanguard Morningstar Growth ETF", "US Large-Cap Growth Equity", D(2004, 1, 26), 0.0003, "qualified", 1.0),
     ETFInfo("VTV", "Vanguard Morningstar Value ETF", "US Large-Cap Value Equity", D(2004, 1, 26), 0.0003, "qualified", 1.0),
     ETFInfo("VB", "Vanguard Morningstar Small-Cap ETF", "US Small-Cap Equity", D(2004, 1, 26), 0.0003, "qualified", 0.76),
+    ETFInfo("VO", "Vanguard Morningstar Mid-Cap ETF", "US Mid-Cap Equity", D(2004, 1, 26), 0.0003, "qualified", 0.89),
+    ETFInfo("VV", "Vanguard Morningstar Large-Cap ETF", "US Large-Cap Equity", D(2004, 1, 27), 0.0003, "qualified", 0.98),
     # Bonds
     ETFInfo("BND", "Vanguard Total Bond Market ETF", "US Investment-Grade Bonds", D(2007, 4, 3), 0.0003, "interest", 0.0),
     ETFInfo("TLT", "iShares 20+ Year Treasury Bond ETF", "Long-Term US Treasuries", D(2002, 7, 22), 0.0015, "treasury", 0.0),
-    ETFInfo("HYG", "iShares iBoxx $ High Yield Corporate Bond ETF", "US High-Yield Bonds", D(2007, 4, 4), 0.0049, "interest", 0.0),
-    ETFInfo("VTEB", "Vanguard Tax-Exempt Bond ETF", "US Municipal Bonds", D(2015, 8, 21), 0.0003, "tax_exempt", 0.0),
     ETFInfo("SCHR", "Schwab Intermediate-Term U.S. Treasury ETF", "Intermediate-Term US Treasuries", D(2010, 8, 5), 0.0003, "treasury", 0.0),
+    ETFInfo("VTEB", "Vanguard Tax-Exempt Bond ETF", "US Municipal Bonds", D(2015, 8, 21), 0.0003, "tax_exempt", 0.0),
+    ETFInfo("HYG", "iShares iBoxx $ High Yield Corporate Bond ETF", "US High-Yield Bonds", D(2007, 4, 4), 0.0049, "interest", 0.0),
     ETFInfo("SCHP", "Schwab U.S. TIPS ETF", "US Inflation-Protected Treasuries", D(2010, 8, 5), 0.0003, "treasury", 0.0),
     ETFInfo("BNDX", "Vanguard Total International Bond ETF (USD Hedged)", "International Bonds", D(2013, 5, 31), 0.0007, "interest", 0.0),
     # Risk-free short-term Treasuries
@@ -87,6 +90,7 @@ CATALOG: dict[str, ETFInfo] = {e.ticker: e for e in [
     ETFInfo("VXUS", "Vanguard Total International Stock ETF", "International Equity", D(2011, 1, 26), 0.0005, "mixed", 0.59),
     ETFInfo("IEFA", "iShares Core MSCI EAFE ETF", "Developed-Markets Equity", D(2012, 10, 18), 0.0007, "mixed", 0.70),
     ETFInfo("VWO", "Vanguard FTSE Emerging Markets ETF", "Emerging-Markets Equity", D(2005, 3, 4), 0.0006, "mixed", 0.35),
+    ETFInfo("VEA", "Vanguard FTSE Developed Markets ETF", "Developed-Markets Equity", D(2007, 7, 20), 0.0003, "mixed", 0.66),
     # Real estate (REIT dividends are mostly non-qualified; SCHH assumed in line with VNQ)
     ETFInfo("VNQ", "Vanguard Real Estate ETF", "US REITs", D(2004, 9, 23), 0.0013, "reit", 0.02, roc_fraction=0.25),
     ETFInfo("SCHH", "Schwab US REIT ETF", "US REITs", D(2011, 1, 13), 0.0007, "reit", 0.02, roc_fraction=0.25),

@@ -356,7 +356,7 @@ class Request:
     rebalancing: Any                 # config.RebalancingCfg (client overrides applied)
     target_probability: float
     goal_risk_metric: str
-    data_tickers: list[str]          # selected + benchmark + risk-free proxy
+    data_tickers: list[str]          # selected (menu order) + benchmark + risk-free proxy
     held_not_selected: list[str] = field(default_factory=list)   # monitoring: prior holdings the
                                                                    # updated profile no longer selects
 
