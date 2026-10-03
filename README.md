@@ -346,7 +346,7 @@ Exit codes:
 
 ## Configuration
 
-All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/default.yaml):
+All settings live in [`robo_advisor/config/default.yaml`](robo_advisor/config/default.yaml):
 
 - the ETF menu and its categories;
 - the questionnaire (questions, answer scores and weights);
@@ -357,30 +357,31 @@ All thresholds live in [`robo_advisor/config/default.yaml`](robo_advisor/config/
 - tax rates and scenario shifts;
 - data-validation limits, monitoring triggers and reviewer tolerances.
 
-Don't edit that file. Put only the settings you want to change in your own file and pass
-`--config` with every command. A misspelled setting name is reported as an `INPUT PROBLEM`
-naming it, rather than silently ignored:
+To change a setting, edit that file in a plain-text editor and save it.
+Every command uses it, so the change applies from the next run. A misspelled setting name or an
+invalid value is reported as an `INPUT PROBLEM` naming it, rather than silently ignored.
+
+To try a different value for one run without changing `default.yaml`, put just that setting in
+another file and pass it with `--config`; it overrides `default.yaml` for that run only:
 ```yaml
-# my.yaml
-data: {provider: yahoo, risk_free_source: fred}
+# try.yaml
 optimization:
   max_position: 0.30
-  goal: {target_probability: 0.90}
 ```
 ```
-./ra run --profile clients/client_name.json --config my.yaml --as-of today --out clients/client_name
+./ra run --profile clients/client_name.json --config try.yaml --as-of today --out clients/client_name
 ```
 
 ### Customization
 
 | To change | Edit | What to do |
 |---|---|---|
-| Which ETFs are offered, and their categories | `universe.categories` in your `my.yaml` | List the tickers under each category. A list you give replaces that category's default list, so repeat the tickers you want to keep. A new category name adds a category; give it a limit under `optimization.category_limits` if it needs one. A ticker may be in only one category. A default category can't be removed from `my.yaml`. Every ticker needs a catalog entry (next row) |
+| Which ETFs are offered, and their categories | `universe.categories` in `default.yaml` | List the tickers under each category. A ticker may be in only one category. To add a category, add a new name with its tickers, and give it a limit under `optimization.category_limits` if it needs one. If you rename or remove a category, rename or remove its entry under `optimization.category_limits` too. Every ticker needs a catalog entry (next row) |
 | An ETF's facts: name, asset class, inception date, expense ratio | The `CATALOG` list in [`robo_advisor/universe.py`](robo_advisor/universe.py) | Edit its `ETFInfo(...)` line. The inception date is written `D(YYYY, M, D)`; `expense_ratio` is a decimal (`0.0003` = 0.03 %). To add an ETF, copy a similar line, change every field (including the distribution fields in the next row), then add the ticker to a category above. Optional `risk_note="…"` adds a special-risk disclosure to any report that holds the ETF |
 | Distributions: their types and percentages | The same `ETFInfo(...)` line | Set the kind of income with `income_type` and the percentages with `roc_fraction` and `qualified_fraction`, as described in [Distribution types](#distribution-types) below. Take the percentages from the fund's latest tax-year reports. `collectible=True` marks physical gold or silver, whose gains are taxed at the collectibles rate |
-| Default tax rates | `tax:` in your `my.yaml` (defaults in `default.yaml`) | Set `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate` and `state_rate` as decimals. They apply only to clients with `"taxes": {"enabled": true}`, and a rate in the client's `taxes` block overrides the default. Route A saves all five rates in the profile, so later changes here don't affect those profiles. `collectibles_rate` (gold and silver ETFs) can be set only here, and is capped at the client's ordinary rate |
-| Risk capacity and risk tolerance questions | `questionnaire.capacity` and `questionnaire.tolerance` in your `my.yaml` | Each question has an `id`, `text`, `weight`, `options` (answer code: score 0–100) and optional `labels` (display text per code). Weights in each list must add up to 1.0. The list you give replaces the whole default list, so copy the full list from `default.yaml` and edit it. Keep the answer codes of the question marked `derive_from_goal` (`under_3y` … `over_20y`), which are filled in from the goal. Put quotes around the codes `"yes"` and `"no"` |
-| How the risk score maps to a volatility limit | `risk_bands` in your `my.yaml` | Give the full list with `max_score`, `profile` and `max_volatility`, in increasing `max_score` order; the last band must reach 100 |
+| Default tax rates | `tax:` in `default.yaml` | Set `ordinary_rate`, `qualified_dividend_rate`, `ltcg_rate`, `stcg_rate` and `state_rate` as decimals. They apply only to clients with `"taxes": {"enabled": true}`, and a rate in the client's `taxes` block overrides the default. Route A saves all five rates in the profile, so later changes here don't affect those profiles. `collectibles_rate` (gold and silver ETFs) can be set only here, and is capped at the client's ordinary rate |
+| Risk capacity and risk tolerance questions | `questionnaire.capacity` and `questionnaire.tolerance` in `default.yaml` | Each question has an `id`, `text`, `weight`, `options` (answer code: score 0–100) and optional `labels` (display text per code). Weights in each list must add up to 1.0. Keep the answer codes of the question marked `derive_from_goal` (`under_3y` … `over_20y`), which are filled in from the goal. Put quotes around the codes `"yes"` and `"no"` |
+| How the risk score maps to a volatility limit | `risk_bands` in `default.yaml` | Edit `max_score`, `profile` and `max_volatility`. `max_score` must increase down the list, and the last band must reach 100 |
 
 #### Distribution types
 
@@ -405,10 +406,14 @@ ordinary dividends.
 
 Notes:
 
-- Put YAML changes in your own file and pass `--config my.yaml` with every command (see above).
-  `./ra etfs --config my.yaml` and `./ra questionnaire --config my.yaml` show the result.
-- Changes to `universe.py` apply to every run directly. It is part of the app's code, so
-  `git pull` (Step 9) may stop if it conflicts with your edits: keep a copy of your lines first.
+- Changes to `default.yaml` and `universe.py` apply from the next run. `./ra etfs` and
+  `./ra questionnaire` show the result.
+- In YAML files, indent with spaces, not tabs.
+- Both files are part of the app's code. Commit your changes before `git pull` (Step 9), or keep
+  a copy, so an update can't conflict with them.
+- `./ra test` checks the shipped settings (for example the exact ETF menu and the default
+  questions), so after you customize `default.yaml` some tests report failures. This does not
+  affect the app.
 - Distribution amounts are not configured. They come with the market data (Yahoo, or the
   `dividend` column of your CSV files).
 - If you add, remove or rename a question `id` or an answer code, update the client profiles to
