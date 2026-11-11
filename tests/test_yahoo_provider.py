@@ -71,7 +71,7 @@ def test_retry_cache_and_refresh(yahoo):
     assert fake_yfinance.CALLS["QQQ"] == 2
     path = yahoo.cache / "QQQ.csv"
     df = pd.read_csv(path, parse_dates=["date"], index_col="date")
-    df.iloc[:-30].to_csv(path)                         # cache now ends ~6 weeks early
+    df[df.index < pd.Timestamp(AS_OF - dt.timedelta(weeks=6))].to_csv(path)   # ends ~6 weeks early
     old = time.time() - 24 * 3600
     os.utime(path, (old, old))
     yahoo.fetch(["QQQ"], WS, AS_OF)

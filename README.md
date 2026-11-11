@@ -157,8 +157,10 @@ The app asks, in order:
 4. **ETFs, category by category.** For each category, type the numbers of the ETFs
    to include (e.g. `1,3`), `all` for the whole category, or press Enter to skip it.
 5. Whether short sales are allowed, then the **position limits**: keep 0 %–50 % for every ETF
-   (Enter), or type `n` to set a minimum and maximum for each chosen ETF. It then shows the
-   **category limits** that apply to the chosen ETFs, which you can keep (Enter) or change.
+   (Enter), or type `n` to set a minimum and maximum for each chosen ETF. If short sales are
+   allowed, it then asks for the maximum gross exposure (long plus short, default 1.5 = 150 %).
+   It then shows the **category limits** that apply to the chosen ETFs, which you can keep
+   (Enter) or change.
 6. Whether to include taxes, and if so, the tax rates.
 7. **How the portfolio is optimized** (see "How the portfolio is optimized" above):
    - with a target: the required probability of reaching it, and how risk is measured;

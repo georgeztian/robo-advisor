@@ -106,20 +106,26 @@ def goal_search(opt: Optimizer, model: MCModel, W0: float, C: float, T: int, tar
             best = max(frontier, key=lambda e: (e["prob"], -e["vol"]))
             required_c = _required_contribution(best["w"], model, W0, C, T, target, p, rebal, tax,
                                                 verify_paths, verify_seed if verify_seed is not None else seed + 1)
+    search_prob = best["prob"]
+    if infeasible and verify_paths:
+        # quote the probability on the sample the final projection reports, not the search sample
+        term = _terminal(best["w"], model, W0, C, T, rebal, tax, verify_paths,
+                         verify_seed if verify_seed is not None else seed + 1)
+        best = {**best, "prob": float((term >= target).mean()), "exp_terminal": float(term.mean())}
     notes = []
     if infeasible:
         notes.append(
-            f"No portfolio within the risk limit reaches a {p:.0%} probability of the target; "
+            f"No portfolio within the risk limit reaches the target with a probability of at least {p:.0%}; "
             f"showing the portfolio with the highest probability ({best['prob']:.1%}).")
         if required_c is not None:
             notes.append(f"A monthly contribution of about ${required_c:,.0f} would be required to "
-                         f"reach a {p:.0%} probability with this portfolio.")
+                         f"reach the target with a probability of {p:.0%} with this portfolio.")
     if best["exp_terminal"] < target:
         notes.append("Expected terminal wealth is below the target.")
     diag = {
         "target_probability": p, "margin": margin, "search_paths": paths, "seed": seed,
         "risk_metric": risk_metric, "infeasible": infeasible,
-        "search_prob": best["prob"], "required_monthly_contribution": required_c,
+        "search_prob": search_prob, "required_monthly_contribution": required_c,
         "frontier": [{k: v for k, v in e.items() if k != "w"} for e in frontier],
         "n_evaluations": len(evals), "verified_prob": verified,
         "verify_paths": verify_paths,

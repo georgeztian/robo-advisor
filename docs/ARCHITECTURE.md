@@ -194,7 +194,9 @@ taxes, missing disclosures and a misreported probability.
   Payments in lieu on shorts are a non-deductible cost that is already in the total return. The
   optimizer prices short legs at the **pre-tax** return, so a short cannot harvest the tax drag
   of the asset it borrows.
-* **Conventions.** A month still in progress at the as-of date contributes no monthly return.
+* **Conventions.** In estimation, a month still in progress at the as-of date contributes no
+  monthly return. The S&P 500 comparison runs to the as-of date itself, so its last month can
+  be partial.
   Validation uses an NYSE holiday calendar (Good Friday included).
 * **Known simplifications.**
   - The short/long-term split uses a dollar-weighted average acquisition month, not lot-level FIFO.
