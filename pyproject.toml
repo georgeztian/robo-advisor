@@ -28,6 +28,12 @@ dev = ["pytest>=7"]
 [project.scripts]
 robo-advisor = "robo_advisor.cli:main"
 
+[tool.setuptools]
+# Packages live in the project folder itself. Saying so lets an editable install (pip install -e)
+# use a plain .pth path entry instead of setuptools' import hook, which prints an
+# "Editable installation" warning on every install.
+package-dir = {"" = "."}
+
 [tool.setuptools.packages.find]
 include = ["robo_advisor*"]
 

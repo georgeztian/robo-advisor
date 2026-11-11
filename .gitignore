@@ -2,6 +2,7 @@ out/
 .cache/
 __pycache__/
 *.egg-info/
+build/
 .pytest_cache/
 .venv/
 # client profiles, reports and audits contain personal financial data
